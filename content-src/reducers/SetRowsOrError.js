@@ -67,6 +67,7 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
       case am.type("NOTIFY_BLOCK_URL"):
       case am.type("NOTIFY_HISTORY_DELETE"):
         state.rows = prevState.rows.filter(val => val.url !== action.data);
+        chrome.history.deleteUrl({ url: action.data });
         break;
       default:
         return prevState;

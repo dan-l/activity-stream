@@ -1,0 +1,19 @@
+{
+  "manifest_version": 2,
+
+  "name": "Getting started example",
+  "description": "This extension shows a Google Image search result for the current page",
+  "version": "1.0",
+
+  "browser_action": {
+    "default_icon": "data/content/img/firstrun-customize.png" 
+  },
+  "permissions": [
+    "history",
+    "tabs",
+    "chrome://favicon/"
+  ],
+  "chrome_url_overrides" : {
+    "newtab": "data/content/activity-streams.html"
+  }
+}
