@@ -50,6 +50,7 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
       case am.type("NOTIFY_BLOCK_URL"):
       case am.type("NOTIFY_HISTORY_DELETE"):
         state.rows = prevState.rows.filter(val => val.url !== action.data);
+        chrome.history.deleteUrl({ url: action.data });
         break;
       case requestType === am.type("RECENT_BOOKMARKS_REQUEST") && am.type("NOTIFY_BOOKMARK_DELETE"):
         state.rows = prevState.rows.filter(val => val.bookmarkGuid !== action.data);
