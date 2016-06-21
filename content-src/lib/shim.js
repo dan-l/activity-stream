@@ -13,30 +13,15 @@ module.exports = function() {
     const action = JSON.parse(event.detail);
     switch (action.type) {
       case "TOP_FRECENT_SITES_REQUEST":
-        chrome.history.search({text: ''}, function(histories) {
-          const rows = histories.map(function(data) {
-            return {
-              url: data.url,
-              title: data.title, 
-              favicon_url: "chrome://favicon/" + data.url,
-              lastVisitDate: parseInt(data.lastVisitTime,10),
-              count: data.visitCount + data.typedCount
-            };
-          }).filter(function(data) {
-            return data.title !== "New Tab";
-          }).sort(function(a, b) { 
-            // descending
-            if (a.count > b.count) {
-                return -1;
-              }
-              if (a.count < b.count) {
-                return 1;
-              }
-              // a must be equal to b
-              return 0;
+        dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data: fakeData.TopSites.rows.map(site => {
+          return Object.assign({}, site, {
+            // images: [],
+            // favicon: null,
+            // favicon_url: null,
+            // favicon_colors: null,
+            // description: null
           });
-          dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data: rows});
-        });
+        })});
         break;
       case "RECENT_BOOKMARKS_REQUEST":
         if (action.meta && action.meta.append) {
@@ -57,17 +42,7 @@ module.exports = function() {
             meta: {append: true}
           });
         } else {
-          chrome.history.search({text: ''}, function(histories) {
-            const rows = histories.map(function(data) {
-              return {
-                url: data.url,
-                title: data.title, 
-                favicon_url: "chrome://favicon/" + data.url,
-                lastVisitDate: parseInt(data.lastVisitTime,10)
-              };
-            });
-            dispatch({type: "RECENT_LINKS_RESPONSE", data: rows});
-          });
+          dispatch({type: "RECENT_LINKS_RESPONSE", data: fakeData.History.rows});
         }
         break;
       case "HIGHLIGHTS_LINKS_REQUEST":
