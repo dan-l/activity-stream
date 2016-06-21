@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
 
-  "name": "Getting started example",
-  "description": "This extension shows a Google Image search result for the current page",
+  "name": "Activity Stream Add-on",
+  "description": "MVP prototype add-on for activity streams",
   "version": "1.0",
 
   "browser_action": {
@@ -11,7 +11,8 @@
   "permissions": [
     "history",
     "tabs",
-    "chrome://favicon/"
+    "chrome://favicon/",
+    "bookmarks"
   ],
   "chrome_url_overrides" : {
     "newtab": "data/content/activity-streams.html"

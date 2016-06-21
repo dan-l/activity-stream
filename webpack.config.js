@@ -55,6 +55,7 @@ module.exports = {
   resolve: {
     extensions: ["", ".js", ".jsx"],
     alias: {
+      "addon-chrome": absolute("./addon-chrome"),
       "common": absolute("./common"),
       "components": absolute("./content-src/components"),
       "reducers": absolute("./content-src/reducers"),
