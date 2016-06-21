@@ -12,6 +12,7 @@ function _transformBookmark(bookmark) {
       newBookmark[key] = bookmark[key];
     }
   }
+  newBookmark.bookmarkDateCreated = bookmark.dateAdded;
   return newBookmark;
 }
 
@@ -41,9 +42,10 @@ module.exports =  class ChromePlacesProvider {
 		return bookmarkPromise;
 	}
 
-	static getHistory() {
+	static getHistory(options) {
+		const searchOptions = options || {text: ''};
 		const historyPromise = new Promise((resolve, reject) => {
-		  chrome.history.search({text: ''}, (histories) => {
+		  chrome.history.search(searchOptions, (histories) => {
 		    const rows = histories.map((data) => {
 		      return {
 		        url: data.url, 
