@@ -33,22 +33,42 @@ module.exports = class ChromeActivityStreams {
           break;
         case "RECENT_BOOKMARKS_REQUEST":
           if (action.meta && action.meta.append) {
-            dispatch({
-              type: "RECENT_BOOKMARKS_RESPONSE",
-              data: faker.createRows({beforeDate: action.data.beforeDate, type: "bookmark"}),
-              meta: {append: true}
+            // dispatch({
+            //   type: "RECENT_BOOKMARKS_RESPONSE",
+            //   data: faker.createRows({beforeDate: action.data.beforeDate, type: "bookmark"}),
+            //   meta: {append: true}
+            // });
+            ChromePlacesProvider.getBookmark().then((bookmarks) => {
+              dispatch({
+                type: "RECENT_BOOKMARKS_RESPONSE",
+                data: bookmarks.filter((bookmark) => bookmark.dateAdded < action.data.beforeDate),
+                meta: {append: true}
+              });
             });
           } else {
-            ChromePlacesProvider.getBookmark().then((bookmarks) => dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data: bookmarks}));
+            ChromePlacesProvider.getBookmark().then((bookmarks) => {
+              const rows = bookmarks.sort((a,b) => {
+                if (a.dateAdded > b.dateAdded) {
+                  return -1; // descending
+                } 
+                if(a.dateAdded < b.dateAdded) {
+                  return 1;
+                } 
+                return 0; // must be equal
+              });
+    
+              dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data: rows})
+            });
           }
           break;
         case "RECENT_LINKS_REQUEST":
           if (action.meta && action.meta.append) {
-            dispatch({
-              type: "RECENT_LINKS_RESPONSE",
-              data: faker.createRows({beforeDate: action.data.beforeDate}),
-              meta: {append: true}
-            });
+            ChromePlacesProvider.getHistory({text: '', endTime: action.data.beforeDate })
+              .then((histories) => dispatch({
+                type: "RECENT_LINKS_RESPONSE", 
+                data: histories,
+                meta: {append: true}
+              }));
           } else {
             ChromePlacesProvider.getHistory().then((histories) => dispatch({type: "RECENT_LINKS_RESPONSE", data: histories}));
           }
