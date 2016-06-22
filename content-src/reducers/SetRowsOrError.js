@@ -23,7 +23,8 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
           state.error = action.data;
         } else {
           state.init = true;
-          state.rows = meta.append ? prevState.rows.concat(action.data) : action.data;
+          state.rows = meta.prepend? action.data.concat(prevState.rows) : 
+            meta.append ? prevState.rows.concat(action.data) : action.data;
           state.error = false;
           // If there is no data, we definitely can't load more.
           if (!action.data || !action.data.length) {
@@ -67,7 +68,6 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
       case am.type("NOTIFY_BLOCK_URL"):
       case am.type("NOTIFY_HISTORY_DELETE"):
         state.rows = prevState.rows.filter(val => val.url !== action.data);
-        chrome.history.deleteUrl({ url: action.data });
         break;
       default:
         return prevState;
