@@ -23,7 +23,7 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
           state.error = action.data;
         } else {
           state.init = true;
-          state.rows = meta.prepend? action.data.concat(prevState.rows) : 
+          state.rows = meta.prepend ? action.data.concat(prevState.rows) :
             meta.append ? prevState.rows.concat(action.data) : action.data;
           state.error = false;
           // If there is no data, we definitely can't load more.

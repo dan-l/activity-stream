@@ -24,57 +24,72 @@ module.exports = class ChromeActivityStreams {
         case "HIGHLIGHTS_LINKS_REQUEST":
           this._highlightsLinks(action);
           break;
+        case "NOTIFY_HISTORY_DELETE":
+          this._historyDelete(action);
+          break;
+        case "NOTIFY_BOOKMARK_ADD":
+          this._bookmarkAdd(action);
+          break;
+        case "NOTIFY_BOOKMARK_DELETE":
+          this._bookmarkDelete(action);
+          break;
+        case "NOTIFY_OPEN_WINDOW":
+          this._openNewWindow(action);
+          break;
       }
     }, false);
   }
 
   _setupChromeListeners() {
     chrome.history.onVisited.addListener((result) => {
-      const row = {
-        url: result.url, 
-        title: result.title,
-        favicon_url: "chrome://favicon/" + result.url,
-        lastVisitDate: parseInt(result.lastVisitTime,10),
-        count: result.visitCount + result.typedCount
-      };
+      const row = ChromePlacesProvider.transformHistory(result);
       dispatch({
-        type: "RECENT_LINKS_RESPONSE", 
+        type: "RECENT_LINKS_RESPONSE",
         data: [row],
         meta: {prepend: true}
       });
     });
 
-    chrome.history.onVisitRemoved.addListener(() => {
-      
+    chrome.history.onVisitRemoved.addListener((result) => {
+      result.urls.forEach((url) =>
+        dispatch({
+          type: "NOTIFY_HISTORY_DELETE",
+          data: url
+        })
+      );
     });
 
-    chrome.bookmarks.onCreated.addListener(() => {
-
+    chrome.bookmarks.onCreated.addListener((id, result) => {
+      const row = ChromePlacesProvider.transformBookmark(result);
+      dispatch({
+        type: "RECENT_BOOKMARKS_RESPONSE",
+        data: [row],
+        meta: {prepend: true}
+      });
     });
 
-    chrome.bookmarks.onRemoved.addListener(() => {
-
-    });
-
-    chrome.bookmarks.onChanged.addListener(() => {
-
+    chrome.bookmarks.onRemoved.addListener((result) => {
+      dispatch({
+        type: "NOTIFY_BOOKMARK_DELETE",
+        data: result
+      });
     });
   }
 
   _topFrecentSites(action) {
     ChromePlacesProvider.getHistory().then((histories) => {
-      const rows = histories.filter((result) => result.title !== 'New Tab')
-        .sort((a,b) => {
+      const rows = histories.filter((result) => result.title !== "New Tab")
+        .sort((a, b) => {
         if (a.count > b.count) {
           return -1; // descending
-        } 
+        }
         if(a.count < b.count) {
           return 1;
-        } 
+        }
         return 0; // must be equal
       });
       dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data:rows});
-    })
+    });
   }
 
   _recentBookmarks(action) {
@@ -88,37 +103,37 @@ module.exports = class ChromeActivityStreams {
       });
     } else {
       ChromePlacesProvider.getBookmark().then((bookmarks) => {
-        const rows = bookmarks.sort((a,b) => {
+        const rows = bookmarks.sort((a, b) => {
           if (a.dateAdded > b.dateAdded) {
             return -1; // descending
-          } 
+          }
           if(a.dateAdded < b.dateAdded) {
             return 1;
-          } 
+          }
           return 0; // must be equal
         });
-    
-        dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data: rows})
+
+        dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data: rows});
       });
     }
   }
 
   _recentLinks(action) {
     if (action.meta && action.meta.append) {
-      // Since 1 day might be too small a gap if we didn't browse 
+      // Since 1 day might be too small a gap if we didn't browse
       // but is 1 week the right choice?
-      const aWeekAgo = action.data.beforeDate - (7*24*60*60*1000);
+      const aWeekAgo = action.data.beforeDate - (7 * 24 * 60 * 60 * 1000);
       ChromePlacesProvider.getHistory({startTime: aWeekAgo, endTime: action.data.beforeDate})
         .then((histories) => {
           dispatch({
-            type: "RECENT_LINKS_RESPONSE", 
+            type: "RECENT_LINKS_RESPONSE",
             data: histories,
             meta: {append: true}
-          })
+          });
         });
     } else {
       ChromePlacesProvider.getHistory().then((histories) => {
-        dispatch({type: "RECENT_LINKS_RESPONSE", data: histories})
+        dispatch({type: "RECENT_LINKS_RESPONSE", data: histories});
       });
     }
   }
@@ -132,8 +147,24 @@ module.exports = class ChromeActivityStreams {
     });
   }
 
+  _historyDelete(action) {
+    chrome.history.deleteUrl({url: action.data});
+  }
+
+  _bookmarkAdd(action) {
+    chrome.bookmarks.create({url: action.data});
+  }
+
+  _bookmarkDelete(action) {
+    chrome.bookmarks.remove(action.data);
+  }
+
+  _openNewWindow(action) {
+    chrome.windows.create({url: action.data.url, incognito: action.data.isPrivate});
+  }
+
 	unload() {
 		window.removeEventListener(CONTENT_TO_ADDON);
-	}	
-}	
+	}
+};
 
