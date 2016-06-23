@@ -8,4 +8,4 @@ function dispatch(action) {
 
 module.exports = {
 	dispatch
-}
+};
