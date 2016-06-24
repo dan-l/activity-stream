@@ -28,6 +28,7 @@ const Routes = React.createClass({
         <Route title="Activity Stream" path="timeline" component={require("components/TimelinePage/TimelinePage")}>
           <IndexRoute title="History" component={require("components/TimelinePage/TimelineHistory")} />
           <Route title="History" path="bookmarks" component={require("components/TimelinePage/TimelineBookmarks")} />
+          <Route title="Cluster" path="clusters" component={require("components/TimelinePage/TimelineCluster")} />
         </Route>
       </Route>
     </Router>);
