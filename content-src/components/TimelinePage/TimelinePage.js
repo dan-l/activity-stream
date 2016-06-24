@@ -14,7 +14,8 @@ const TimelinePage = React.createClass({
     const pathname = props.location && props.location.pathname;
     const navItems = [
       {title: "All", to: "/timeline", active: true, icon: "firefox-white"},
-      {title: "Bookmarks", to: "/timeline/bookmarks", icon: "bookmark-white"}
+      {title: "Bookmarks", to: "/timeline/bookmarks", icon: "bookmark-white"},
+      {title: "Clustering", to: "/timeline/clusters"}
     ];
     return (<div className="outer-wrapper">
       <Header
