@@ -9,10 +9,6 @@ if (__CONFIG__.USE_SHIM) {
   require("lib/shim")();
 }
 
-if (__CONFIG__.IS_CHROME) {
-	require("addon-chrome/main")();
-}
-
 const Root = React.createClass({
   render() {
     return (<Provider store={store}>

@@ -33,6 +33,12 @@ module.exports = class ChromeActivityStreams {
         case "NOTIFY_BOOKMARK_DELETE":
           this._bookmarkDelete(action);
           break;
+        case "NOTIFY_BLOCK_URL":
+          this._blockUrl(action);
+          break;
+        case "NOTIFY_UNBLOCK_ALL":
+          this._unblockAll(action);
+          break;
         case "NOTIFY_OPEN_WINDOW":
           this._openNewWindow(action);
           break;
@@ -42,25 +48,32 @@ module.exports = class ChromeActivityStreams {
 
   _setupChromeListeners() {
     chrome.history.onVisited.addListener((result) => {
-      const row = ChromePlacesProvider.transformHistory(result);
-      dispatch({
-        type: "RECENT_LINKS_RESPONSE",
-        data: [row],
-        meta: {prepend: true}
-      });
+      // TODO this is firing multiple times (eg google search, redirections)
+      // need to find a better way to detect history
+      // const row = ChromePlacesProvider.transformHistory(newHistories[0]);
+      // ChromePlacesProvider.addHistory(row);
+      // dispatch({
+      //   type: "RECENT_LINKS_RESPONSE",
+      //   data: [row],
+      //   meta: {prepend: true}
+      // });
     });
 
     chrome.history.onVisitRemoved.addListener((result) => {
-      result.urls.forEach((url) =>
+      result.urls.forEach((url) => {
+        ChromePlacesProvider.removeHistory(url);
         dispatch({
           type: "NOTIFY_HISTORY_DELETE",
           data: url
-        })
-      );
+        });
+      });
     });
 
     chrome.bookmarks.onCreated.addListener((id, result) => {
+      const isFolder = !result.url;
+      if (isFolder) return;
       const row = ChromePlacesProvider.transformBookmark(result);
+      ChromePlacesProvider.addBookmark(row);
       dispatch({
         type: "RECENT_BOOKMARKS_RESPONSE",
         data: [row],
@@ -69,6 +82,7 @@ module.exports = class ChromeActivityStreams {
     });
 
     chrome.bookmarks.onRemoved.addListener((result) => {
+      ChromePlacesProvider.removeBookmark(result);
       dispatch({
         type: "NOTIFY_BOOKMARK_DELETE",
         data: result
@@ -95,26 +109,21 @@ module.exports = class ChromeActivityStreams {
   _recentBookmarks(action) {
     if (action.meta && action.meta.append) {
       ChromePlacesProvider.getBookmark().then((bookmarks) => {
+       const rows = bookmarks
+        .filter((bookmark) => bookmark.dateAdded < action.data.beforeDate);
+
         dispatch({
           type: "RECENT_BOOKMARKS_RESPONSE",
-          data: bookmarks.filter((bookmark) => bookmark.dateAdded < action.data.beforeDate),
+          data: rows,
           meta: {append: true}
         });
       });
     } else {
-      ChromePlacesProvider.getBookmark().then((bookmarks) => {
-        const rows = bookmarks.sort((a, b) => {
-          if (a.dateAdded > b.dateAdded) {
-            return -1; // descending
-          }
-          if(a.dateAdded < b.dateAdded) {
-            return 1;
-          }
-          return 0; // must be equal
-        });
+       ChromePlacesProvider.getBookmark().then((bookmarks) => {
+         const rows = bookmarks;
 
-        dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data: rows});
-      });
+          dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data: rows});
+       });
     }
   }
 
@@ -125,16 +134,21 @@ module.exports = class ChromeActivityStreams {
       const aWeekAgo = action.data.beforeDate - (7 * 24 * 60 * 60 * 1000);
       ChromePlacesProvider.getHistory({startTime: aWeekAgo, endTime: action.data.beforeDate})
         .then((histories) => {
+          const rows = histories;
+
           dispatch({
             type: "RECENT_LINKS_RESPONSE",
-            data: histories,
+            data: rows,
             meta: {append: true}
           });
         });
     } else {
-      ChromePlacesProvider.getHistory().then((histories) => {
-        dispatch({type: "RECENT_LINKS_RESPONSE", data: histories});
-      });
+      ChromePlacesProvider.getHistory()
+        .then((histories) => {
+          const rows = histories;
+
+          dispatch({type: "RECENT_LINKS_RESPONSE", data: rows});
+        });
     }
   }
 
@@ -143,8 +157,17 @@ module.exports = class ChromeActivityStreams {
     const historyPromise = ChromePlacesProvider.getHistory();
     Promise.all([bookmarkPromise, historyPromise]).then((results) => {
       const rows = results.reduce((acc, result) => acc.concat(result), []);
+
       dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: rows});
     });
+  }
+
+  _blockUrl(action) {
+    ChromePlacesProvider.addBlockedUrl(action.data);
+  }
+
+  _unblockAll(action) {
+    ChromePlacesProvider.unblockAllUrl();
   }
 
   _historyDelete(action) {

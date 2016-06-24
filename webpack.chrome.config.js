@@ -5,8 +5,8 @@ const path = require("path");
 const absolute = (relPath) => path.join(__dirname, relPath);
 const EnvLoaderPlugin = require("webpack-env-loader-plugin");
 
-const srcPath = absolute("./content-src/main.js");
-const outputDir = absolute("./data/content");
+const srcPath = absolute("./addon-chrome/main.js");
+const outputDir = absolute("./addon-chrome/content");
 const outputFilename = "bundle.js";
 
 let env = process.env.NODE_ENV || "development";
@@ -55,7 +55,9 @@ module.exports = {
   resolve: {
     extensions: ["", ".js", ".jsx"],
     alias: {
+      "addon-chrome": absolute("./addon-chrome"),
       "common": absolute("./common"),
+      "content-src": absolute("./content-src"),
       "components": absolute("./content-src/components"),
       "reducers": absolute("./content-src/reducers"),
       "actions": absolute("./content-src/actions"),
@@ -70,11 +72,11 @@ module.exports = {
       {test: /\.json$/, loader: "json"},
       {
         test: /\.jsx?$/,
-        include: /.\/(common|content-src|content-test)\//,
+        include: /.\/(addon-chrome|common|content-src|content-test)\//,
         loader: "babel"
       }
     ]
   },
-  devtool: env === "production" ? null : "eval", // This is for Firefox
+  devtool: "inline-source-map",
   plugins
 };

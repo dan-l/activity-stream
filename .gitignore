@@ -7,6 +7,7 @@ npm-debug.log
 logs/
 dist/
 data/content/
+addon-chrome/content/
 activity-streams-env/
 firefox/
 config.yml
