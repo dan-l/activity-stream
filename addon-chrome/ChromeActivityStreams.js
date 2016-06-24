@@ -42,6 +42,12 @@ module.exports = class ChromeActivityStreams {
         case "NOTIFY_OPEN_WINDOW":
           this._openNewWindow(action);
           break;
+        case "SEARCH_SUGGESTIONS_REQUEST":
+          this._searchSuggestions(action);
+          break;
+        case "NOTIFY_PERFORM_SEARCH":
+          this._performSearch(action);
+          break;
       }
     }, false);
   }
@@ -184,6 +190,31 @@ module.exports = class ChromeActivityStreams {
 
   _openNewWindow(action) {
     chrome.windows.create({url: action.data.url, incognito: action.data.isPrivate});
+  }
+
+  _searchSuggestions(action) {
+    // TODO use external search api to add more results
+    const suggestionLength = 6;
+    const searchString = action.data.searchString;
+
+    ChromePlacesProvider.getHistory()
+      .then((histories) => {
+        const formHistory = histories
+          .filter((h) => h.title.toLowerCase().startsWith(action.data.searchString))
+          .slice(0, suggestionLength)
+          .map((h) => h.title);
+          dispatch({
+            type: "SEARCH_SUGGESTIONS_RESPONSE",
+            data: {
+              formHistory,
+              searchString
+            }
+          });
+      });
+  }
+
+  _notifyPerformSearch(action) {
+    // TODO need to figure out browser mechanics of directing to browser's default search page
   }
 
 	unload() {
