@@ -6,7 +6,7 @@
   "version": "1.0",
 
   "browser_action": {
-    "default_icon": "data/content/img/firstrun-customize.png" 
+    "default_icon": "addon-chrome/content/img/firstrun-customize.png"
   },
   "permissions": [
     "history",
@@ -15,6 +15,6 @@
     "bookmarks"
   ],
   "chrome_url_overrides" : {
-    "newtab": "data/content/activity-streams.html"
+    "newtab": "addon-chrome/content/activity-streams.html"
   }
 }
