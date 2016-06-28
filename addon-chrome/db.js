@@ -42,9 +42,24 @@ module.exports = class Db {
 	static addToDb(store, item) {
 		const addPromise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
-			const request = objectStore.add(item);
-			request.onsuccess = function(event) {
-				resolve();
+			let getRequest = objectStore.get(item[objectStore.keyPath]);
+			getRequest.onsuccess = function(event) {
+				const oldValue = getRequest.result;
+
+				if(!oldValue) {
+					let addRequest = objectStore.add(item);
+
+					addRequest.onsuccess = function(event) {
+						resolve();
+					};
+				} else {
+					Object.assign(oldValue, item);
+
+					let putRequest = objectStore.put(oldValue);
+					putRequest.onsuccess = function(event) {
+						resolve();
+					};
+				}
 			};
 		});
 

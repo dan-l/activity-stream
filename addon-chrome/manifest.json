@@ -6,15 +6,19 @@
   "version": "1.0",
 
   "browser_action": {
-    "default_icon": "addon-chrome/content/img/firstrun-customize.png"
+    "default_icon": "content/img/firstrun-customize.png"
   },
   "permissions": [
     "history",
     "tabs",
+    "management",
     "chrome://favicon/",
-    "bookmarks"
+    "bookmarks",
+    "topSites",
+    "http://*/*",
+    "https://*/*"
   ],
   "chrome_url_overrides" : {
-    "newtab": "addon-chrome/content/activity-streams.html"
+    "newtab": "content/activity-streams.html"
   }
 }

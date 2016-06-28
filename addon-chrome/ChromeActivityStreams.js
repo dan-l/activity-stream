@@ -54,15 +54,16 @@ module.exports = class ChromeActivityStreams {
 
   _setupChromeListeners() {
     chrome.history.onVisited.addListener((result) => {
-      // TODO this is firing multiple times (eg google search, redirections)
-      // need to find a better way to detect history
-      // const row = ChromePlacesProvider.transformHistory(newHistories[0]);
-      // ChromePlacesProvider.addHistory(row);
-      // dispatch({
-      //   type: "RECENT_LINKS_RESPONSE",
-      //   data: [row],
-      //   meta: {prepend: true}
-      // });
+      ChromePlacesProvider.transformHistory(result).then((row) => {
+        ChromePlacesProvider.addHistory(row).then((result) => {
+          ChromePlacesProvider.getHistory().then((histories) => {
+            dispatch({
+              type: "RECENT_LINKS_RESPONSE",
+              data: histories
+            });
+          });
+        });
+      });
     });
 
     chrome.history.onVisitRemoved.addListener((result) => {
@@ -98,17 +99,12 @@ module.exports = class ChromeActivityStreams {
 
   _topFrecentSites(action) {
     ChromePlacesProvider.getHistory().then((histories) => {
-      const rows = histories.filter((result) => result.title !== "New Tab")
-        .sort((a, b) => {
-        if (a.count > b.count) {
-          return -1; // descending
-        }
-        if(a.count < b.count) {
-          return 1;
-        }
-        return 0; // must be equal
+      chrome.topSites.get((results) => {
+        const topUrls = results.map((r) => r.url);
+        const rows = histories
+          .filter((hist) => topUrls.indexOf(hist.url) > -1);
+        dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data:rows});
       });
-      dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data:rows});
     });
   }
 
@@ -161,8 +157,13 @@ module.exports = class ChromeActivityStreams {
   _highlightsLinks(action) {
     const bookmarkPromise = ChromePlacesProvider.getBookmark();
     const historyPromise = ChromePlacesProvider.getHistory();
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
     Promise.all([bookmarkPromise, historyPromise]).then((results) => {
-      const rows = results.reduce((acc, result) => acc.concat(result), []);
+      const rows = results
+        .reduce((acc, result) => acc.concat(result), [])
+        .filter((r) =>
+          ((new Date().getTime() - r.lastVisitDate) > threeDays) &&
+          r.visitCount <= 3);
 
       dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: rows});
     });
@@ -193,19 +194,23 @@ module.exports = class ChromeActivityStreams {
   }
 
   _searchSuggestions(action) {
-    // TODO use external search api to add more results
+    // TODO improve with fuzzy search
     const suggestionLength = 6;
     const searchString = action.data.searchString;
 
     ChromePlacesProvider.getHistory()
       .then((histories) => {
-        const formHistory = histories
-          .filter((h) => h.title.toLowerCase().startsWith(action.data.searchString))
-          .slice(0, suggestionLength)
-          .map((h) => h.title);
+        const nonDupHistTitle = histories
+          .map((hist) => hist.title)
+          .filter((title, index, array) => array.indexOf(title) === index);
+        const formHistory = nonDupHistTitle
+          .filter((title) => title.toLowerCase().startsWith(action.data.searchString))
+          .slice(0, suggestionLength);
+
           dispatch({
             type: "SEARCH_SUGGESTIONS_RESPONSE",
             data: {
+              suggestions: [searchString],
               formHistory,
               searchString
             }
@@ -213,8 +218,12 @@ module.exports = class ChromeActivityStreams {
       });
   }
 
-  _notifyPerformSearch(action) {
+  _performSearch(action) {
     // TODO need to figure out browser mechanics of directing to browser's default search page
+    const searchUrl = "https://www.google.ca/search?q=";
+    const searchTerm = action.data.searchString.replace(/\s/g, "+");
+
+    chrome.tabs.create({url: searchUrl + searchTerm});
   }
 
 	unload() {
