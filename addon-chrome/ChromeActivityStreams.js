@@ -174,9 +174,9 @@ module.exports = class ChromeActivityStreams {
   _highlightsLinks(action) {
       ChromePlacesProvider.getHightlights()
         .then((highlights) => {
+          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
           // avoid holding up the init process
           // grab preview images asynchronously and dispatch them later
-          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
           ChromePlacesProvider.getHighlightsImg(highlights)
             .then((r) => {
               dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: r});
