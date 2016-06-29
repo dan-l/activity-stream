@@ -183,8 +183,6 @@ module.exports.selectHistory = createSelector(
 // Timeline Bookmarks
 module.exports.selectBookmarks = state => ({Bookmarks: state.Bookmarks});
 
-module.exports.selectHistoryBookmarks = state => ({History: state.History, Bookmarks: state.Bookmarks});
-
 module.exports.selectSiteIcon = selectSiteIcon;
 module.exports.selectSiteIcon.BACKGROUND_FADE = BACKGROUND_FADE;
 module.exports.DEFAULT_FAVICON_BG_COLOR = DEFAULT_FAVICON_BG_COLOR;
