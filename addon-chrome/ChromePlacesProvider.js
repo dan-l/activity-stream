@@ -1,9 +1,9 @@
 const db = require("addon-chrome/db");
+
 const {BOOKMARK, HISTORY, BLOCKED_URL, LAST_VISIT_TIME, DATE_ADDED, PREV} = require("addon-chrome/constants");
 const {getMetadata} = require("page-metadata-parser");
 
-module.exports =  class ChromePlacesProvider {
-
+module.exports = class ChromePlacesProvider {
 	static init() {
 		const historyPromise = this._getHistory();
 		const bookmarkPromise = this._getBookmark();
@@ -100,6 +100,85 @@ module.exports =  class ChromePlacesProvider {
 		return historyPromise;
 	}
 
+	static getHightlights() {
+		const hightlightsPromise = new Promise((resolve, reject) => {
+			const bookmarkPromise = this.getBookmark();
+			const historyPromise = this.getHistory();
+			const threeDays = 3 * 24 * 60 * 60 * 1000;
+			const today = new Date().getTime();
+
+			Promise.all([bookmarkPromise, historyPromise]).then((results) => {
+				const bookmarks = results[0];
+				const histories = this._mergeLinks(results[1], bookmarks);
+
+				const rows = bookmarks.concat(histories)
+					.filter((r, index) =>
+						!/google/.test(r.url) &&
+							(today - (r.lastVisitDate || r.dateAdded)) > threeDays &&
+							(r.visitCount || 0) <= 3);
+
+				resolve(rows);
+			});
+		});
+
+		return hightlightsPromise;
+	}
+
+	static getHighlightsImg(sites) {
+		const imageWidth = 450;
+		const imageHeight = 278;
+
+		const highlightImgPromise = new Promise((resolve, reject) => {
+			const imgPromises = [];
+			for (let i = 0; i < sites.length; i++) {
+				let site = sites[i];
+				if (site.images) {
+					imgPromises.push(site);
+					continue;
+				}
+				const imgPromise = fetch(site.url)
+					.then((r) => r.text())
+					.catch((ex) => imgPromises.push(site)) // can't preview sites like localhost
+					.then((r) => {
+						const pageMetadata = getMetadata(new DOMParser().parseFromString(r, "text/html"));
+
+						const imageUrl = pageMetadata.image_url;
+						const description = pageMetadata.description;
+						const images = [];
+
+						if (imageUrl) {
+							images.push({
+								url: imageUrl,
+								width: imageWidth,
+								height: imageHeight
+							});
+						}
+
+						Object.assign(site, {images, description});
+
+						return site;
+					});
+
+					imgPromises.push(imgPromise);
+			}
+
+			Promise.all(imgPromises).then((highlights) => {
+				highlights.forEach((highlight) => {
+					if (!highlight) return;
+					if (highlight.dateAdded) {
+						db.addToDb(BOOKMARK, highlight);
+					}
+					if (highlight.lastVisitTime) {
+						db.addToDb(HISTORY, highlight);
+					}
+				});
+				resolve(highlights);
+			});
+		});
+
+		return highlightImgPromise;
+	}
+
 	static _getBookmark() {
 		const bookmarkPromise = new Promise((resolve, reject) => {
 			chrome.bookmarks.getTree((trees) => {
@@ -123,12 +202,12 @@ module.exports =  class ChromePlacesProvider {
 		const historyPromise = new Promise((resolve, reject) => {
 			chrome.history.search(searchOptions, (histories) => {
 				if (startTime && endTime) {
-					// for whatever reason the startTime and endTime parameter doesn't return the right results all the time,
+					// api uses start and end time as OR instead of AND
 					// so filter it for now or we could just use this ???
-					histories = histories.filter((result) => result.lastVisitDate > startTime && result.lastVisitDate < endTime);
+					histories = histories.filter((result) => result.lastVisitTime > startTime && result.lastVisitTime < endTime);
 				}
-				Promise.all(histories.map((result) => this.transformHistory(result)))
-					.then((rows) => resolve(rows));
+				const rows = histories.map((result) => this.transformHistory(result));
+				resolve(rows);
 			});
 		});
 
@@ -167,30 +246,10 @@ module.exports =  class ChromePlacesProvider {
   }
 
 	static transformHistory(hist) {
-		return fetch(hist.url)
-			.then((r) => r.text())
-			.then((r) => {
-				const pageMetadata = getMetadata(new DOMParser().parseFromString(r, "text/html"));
-				const imageWidth = 450;
-				const imageHeight = 278;
-				const imageUrl = pageMetadata.image_url;
-
-				if (imageUrl) {
-					Object.assign(hist, {
-						images: [{
-							url: imageUrl,
-							width: imageWidth,
-							height: imageHeight
-						}]
-					});
-				}
-
-				return Object.assign(hist, {
-					description: pageMetadata.description,
-					favicon_url: pageMetadata.icon_url || "chrome://favicon/" + hist.url,
-					lastVisitDate: parseInt(hist.lastVisitTime, 10)
-				});
-			});
+		return Object.assign(hist, {
+			favicon_url: "chrome://favicon/" + hist.url,
+			lastVisitDate: parseInt(hist.lastVisitTime, 10)
+		});
 	}
 
 	static _processBookmarks(trees) {

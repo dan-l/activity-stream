@@ -11,10 +11,8 @@
   "permissions": [
     "history",
     "tabs",
-    "management",
     "chrome://favicon/",
     "bookmarks",
-    "topSites",
     "http://*/*",
     "https://*/*"
   ],

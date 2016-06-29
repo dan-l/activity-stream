@@ -1,5 +1,6 @@
 const {CONTENT_TO_ADDON} = require("common/event-constants");
 const ChromePlacesProvider = require("addon-chrome/ChromePlacesProvider");
+const ChromeSearchProvider = require("addon-chrome/ChromeSearchProvider");
 const {dispatch} = require("addon-chrome/ChromeActionManager");
 
 module.exports = class ChromeActivityStreams {
@@ -48,19 +49,21 @@ module.exports = class ChromeActivityStreams {
         case "NOTIFY_PERFORM_SEARCH":
           this._performSearch(action);
           break;
+        case "SEARCH_STATE_REQUEST":
+          this._searchState();
+          break;
       }
     }, false);
   }
 
   _setupChromeListeners() {
     chrome.history.onVisited.addListener((result) => {
-      ChromePlacesProvider.transformHistory(result).then((row) => {
-        ChromePlacesProvider.addHistory(row).then((result) => {
-          ChromePlacesProvider.getHistory().then((histories) => {
-            dispatch({
-              type: "RECENT_LINKS_RESPONSE",
-              data: histories
-            });
+      const row = ChromePlacesProvider.transformHistory(result);
+      ChromePlacesProvider.addHistory(row).then((result) => {
+        ChromePlacesProvider.getHistory().then((histories) => {
+          dispatch({
+            type: "RECENT_LINKS_RESPONSE",
+            data: histories
           });
         });
       });
@@ -99,12 +102,26 @@ module.exports = class ChromeActivityStreams {
 
   _topFrecentSites(action) {
     ChromePlacesProvider.getHistory().then((histories) => {
-      chrome.topSites.get((results) => {
-        const topUrls = results.map((r) => r.url);
-        const rows = histories
-          .filter((hist) => topUrls.indexOf(hist.url) > -1);
-        dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data:rows});
-      });
+      // https://dxr.mozilla.org/mozilla-central/source/mobile/android/base/java/org/mozilla/gecko/db/BrowserContract.java#124
+      // numVisits * max(1, 100 * 225 / (age*age + 225))
+      const rows = histories
+        .filter((hist) => !/google/.test(hist.url))
+        .map((hist) => {
+          const microsecondsPerDay = 86400000000;
+          const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
+          return Object.assign(hist, {frencency: hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225))});
+        })
+        .sort((a, b) => {
+          if (a.frencency > b.frencency) {
+            return -1;
+          }
+          if (a.frencency < b.frencency) {
+            return 1;
+          }
+          return 0;
+        });
+
+      dispatch({type: "TOP_FRECENT_SITES_RESPONSE", data:rows});
     });
   }
 
@@ -155,18 +172,16 @@ module.exports = class ChromeActivityStreams {
   }
 
   _highlightsLinks(action) {
-    const bookmarkPromise = ChromePlacesProvider.getBookmark();
-    const historyPromise = ChromePlacesProvider.getHistory();
-    const threeDays = 3 * 24 * 60 * 60 * 1000;
-    Promise.all([bookmarkPromise, historyPromise]).then((results) => {
-      const rows = results
-        .reduce((acc, result) => acc.concat(result), [])
-        .filter((r) =>
-          ((new Date().getTime() - r.lastVisitDate) > threeDays) &&
-          r.visitCount <= 3);
-
-      dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: rows});
-    });
+      ChromePlacesProvider.getHightlights()
+        .then((highlights) => {
+          // avoid holding up the init process
+          // grab preview images asynchronously and dispatch them later
+          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
+          ChromePlacesProvider.getHighlightsImg(highlights)
+            .then((r) => {
+              dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: r});
+            });
+        });
   }
 
   _blockUrl(action) {
@@ -193,37 +208,19 @@ module.exports = class ChromeActivityStreams {
     chrome.windows.create({url: action.data.url, incognito: action.data.isPrivate});
   }
 
+  _searchState() {
+    const rows = ChromeSearchProvider.getEngines();
+    dispatch({type: "SEARCH_STATE_RESPONSE", data: rows});
+  }
+
   _searchSuggestions(action) {
-    // TODO improve with fuzzy search
-    const suggestionLength = 6;
-    const searchString = action.data.searchString;
-
-    ChromePlacesProvider.getHistory()
-      .then((histories) => {
-        const nonDupHistTitle = histories
-          .map((hist) => hist.title)
-          .filter((title, index, array) => array.indexOf(title) === index);
-        const formHistory = nonDupHistTitle
-          .filter((title) => title.toLowerCase().startsWith(action.data.searchString))
-          .slice(0, suggestionLength);
-
-          dispatch({
-            type: "SEARCH_SUGGESTIONS_RESPONSE",
-            data: {
-              suggestions: [searchString],
-              formHistory,
-              searchString
-            }
-          });
-      });
+    ChromeSearchProvider.getSuggestions(action.data.searchString)
+      .then((rows) => dispatch({type: "SEARCH_SUGGESTIONS_RESPONSE", data: rows}));
   }
 
   _performSearch(action) {
-    // TODO need to figure out browser mechanics of directing to browser's default search page
-    const searchUrl = "https://www.google.ca/search?q=";
-    const searchTerm = action.data.searchString.replace(/\s/g, "+");
-
-    chrome.tabs.create({url: searchUrl + searchTerm});
+    const searchUrl = ChromeSearchProvider.getSearchUrl(action.data.searchString, action.data.engineName);
+    chrome.tabs.update({url: searchUrl});
   }
 
 	unload() {
