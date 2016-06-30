@@ -52,6 +52,9 @@ module.exports = class ChromeActivityStreams {
         case "SEARCH_STATE_REQUEST":
           this._searchState();
           break;
+        case "SEARCH_UISTRINGS_REQUEST":
+          this._searchUIStrings();
+          break;
       }
     }, false);
   }
@@ -221,6 +224,16 @@ module.exports = class ChromeActivityStreams {
   _performSearch(action) {
     const searchUrl = ChromeSearchProvider.getSearchUrl(action.data.searchString, action.data.engineName);
     chrome.tabs.update({url: searchUrl});
+  }
+
+  _searchUIStrings(action) {
+    const uiStrings = {
+      "searchHeader": "%S Search",
+      "searchForSomethingWith": "Search for %S with",
+      "searchSettings": "Change Search Settings",
+      "searchPlaceholder": "Search the Web"
+    };
+    dispatch({type: "SEARCH_UISTRINGS_RESPONSE", data: uiStrings});
   }
 
 	unload() {

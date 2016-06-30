@@ -53,26 +53,23 @@ module.exports = class ChromeSearchProvider {
 		const suggestionsPromise = new Promise((resolve, reject) => {
 			ChromePlacesProvider.getHistory()
 				.then((histories) => {
-					const titles = histories.map((h) => h.title);
-					const formHistory = histories
-						.filter((hist, index) => hist.title && titles.indexOf(hist.title) === index)
-						.map((hist) => {
-							return Object.assign(hist,
-								{distance: this._fuzzySearch(searchString.toLowerCase(), hist)});
-						})
-						.sort((a, b) => {
-							if (a.distance < b.distance) {
-								return -1;
-							}
-							if (a.distance > b.distance) {
-								return 1;
-							}
-							return 0;
-						})
-						.map((hist) => {
-							return hist.title;
-						})
-						.slice(0, suggestionLength);
+					const formHistory = this._dedupe(
+						this._dedupe(histories)
+							.filter((hist) => !!hist.title)
+							.map((hist) => Object.assign(hist, {distance: this._fuzzySearch(searchString.toLowerCase(), hist)}))
+							.filter((hist) => hist.distance !== 0)
+							.sort((a, b) => {
+								if (a.distance > b.distance) {
+									return -1;
+								}
+								if (a.distance < b.distance) {
+									return 1;
+								}
+								return 0;
+							})
+							.map((hist) => hist.title)
+							.slice(0, suggestionLength)
+					);
 
 					resolve({
 						suggestions: [searchString],
@@ -85,14 +82,20 @@ module.exports = class ChromeSearchProvider {
 		return suggestionsPromise;
 	}
 
-	static _fuzzySearch(search, h, distanceFn) {
-		const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "");
-		const title = h.title.toLowerCase();
-		const vec1 = url.split(/[^A-Z^a-z^]+/).concat(title.split(/[^A-Z^a-z]+/)).filter((w) => !!w);
-		const vec2 = [search];
-		const allColumns = vec1.concat(vec2);
+	static _fuzzySearch(search, h) {
+			const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "");
+			const title = h.title.toLowerCase();
+			const vec1 = url.split(/[^A-Z^a-z^]+/).concat(title.split(/[^A-Z^a-z]+/)).filter((w) => !!w);
+			const vec2 = search.split(" ");
+			const allColumns = this._dedupe(vec1.concat(vec2));
 
-		return this._pearson(this._transformVectors(allColumns, vec1), this._transformVectors(allColumns, vec2));
+			return this._pearson(this._transformVectors(allColumns, vec1), this._transformVectors(allColumns, vec2));
+	}
+
+	static _computeVectors(h) {
+		const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "").split(/[^A-Z^a-z^]+/);
+		const title = h.title.toLowerCase().split(/[^A-Z^a-z]+/);
+		return this._dedupe(url.concat(title).filter((w) => !!w && w.length > 1));
 	}
 
 	static _transformVectors(allColumns, vec) {
@@ -123,13 +126,17 @@ module.exports = class ChromeSearchProvider {
 			return 0;
 		}
 
-		return 1 - num / den;
+		return num / den;
 	}
 
 	static _sum(list) {
     return list.reduce((memo, num) => {
         return memo + num;
     }, 0);
+  }
+
+  static _dedupe(array) {
+		return array.filter((v, index, array) => array.indexOf(v) === index);
   }
 
 };
