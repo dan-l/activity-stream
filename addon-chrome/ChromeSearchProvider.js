@@ -32,6 +32,8 @@ const engineUrlMap = {
 	Wikipedia: "https://en.wikipedia.org/wiki/Special:Search?search="
 };
 
+// TODO trim strings for search to match better
+
 module.exports = class ChromeSearchProvider {
 	static getEngines() {
 		return {
@@ -85,11 +87,14 @@ module.exports = class ChromeSearchProvider {
 	static _fuzzySearch(search, h) {
 			const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "");
 			const title = h.title.toLowerCase();
-			const vec1 = url.split(/[^A-Z^a-z^]+/).concat(title.split(/[^A-Z^a-z]+/)).filter((w) => !!w);
-			const vec2 = search.split(" ");
+			let vec1 = url.split(/[^A-Z^a-z^]+/).concat(title.split(/[^A-Z^a-z]+/)).filter((w) => !!w);
+			let vec2 = search.split(" ");
 			const allColumns = this._dedupe(vec1.concat(vec2));
+			vec1 = this._transformVectors(allColumns, vec1);
+			vec2 = this._transformVectors(allColumns, vec2);
+			const score = this._pearson(vec1, vec2);
 
-			return this._pearson(this._transformVectors(allColumns, vec1), this._transformVectors(allColumns, vec2));
+			return score;
 	}
 
 	static _computeVectors(h) {

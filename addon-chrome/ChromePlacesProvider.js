@@ -30,6 +30,7 @@ module.exports = class ChromePlacesProvider {
 	static addBookmark(newBookmark) {
 		const bookmarkPromise = db.addToDb(BOOKMARK, newBookmark);
 		const historyPromise = db.addToDb(HISTORY, {url: newBookmark.url, bookmarkGuid: newBookmark.bookmarkGuid});
+
 		return Promise.all([bookmarkPromise, historyPromise]).then((results) => {
 			return results[0];
 		});
@@ -97,7 +98,69 @@ module.exports = class ChromePlacesProvider {
 					});
 			}
 		});
+
 		return historyPromise;
+	}
+
+	static topFrecentSites() {
+		const promise = new Promise((resolve, reject) => {
+			this.getHistory().then((histories) => {
+			  // https://dxr.mozilla.org/mozilla-central/source/mobile/android/base/java/org/mozilla/gecko/db/BrowserContract.java#124
+			  // numVisits * max(1, 100 * 225 / (age*age + 225))
+			  const rows = histories
+			    .filter((hist) => !/google/.test(hist.url))
+			    .map((hist) => {
+			      const microsecondsPerDay = 86400000000;
+			      const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
+			      return Object.assign(hist, {frencency: hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225))});
+			    })
+			    .sort((a, b) => {
+			      if (a.frencency > b.frencency) {
+			        return -1;
+			      }
+			      if (a.frencency < b.frencency) {
+			        return 1;
+			      }
+			      return 0;
+			    });
+
+			  resolve(rows);
+			});
+		});
+
+		return promise;
+	}
+
+	static recentBookmarks(options) {
+		const promise = new Promise((resolve, reject) => {
+			this.getBookmark().then((bookmarks) => {
+				let rows = bookmarks;
+				if (options && options.beforeDate) {
+					 rows = bookmarks.filter((bookmark) => bookmark.dateAdded < options.beforeDate);
+				}
+				resolve(rows);
+	    })
+		});
+
+		return promise;
+	}
+
+	static recentLinks(options) {
+		const promise = new Promise((resolve, reject) => {
+			let searchOptions;
+			if (options && options.beforeDate) {
+		    // Since 1 day might be too small a gap if we didn't browse
+		    // but is 1 week the right choice?
+			  const aWeekAgo = options.beforeDate - (7 * 24 * 60 * 60 * 1000);
+				searchOptions = {
+					startTime: aWeekAgo,
+					endTime: options.beforeDate
+				};
+			}
+	    this.getHistory(searchOptions).then(resolve);
+		});
+
+		return promise;
 	}
 
 	static getHightlights() {
@@ -255,6 +318,7 @@ module.exports = class ChromePlacesProvider {
 	static _processBookmarks(trees) {
 		const bookmarks = [];
 		this._collectBookmarks(trees, bookmarks);
+
 		return bookmarks;
 	}
 
@@ -268,6 +332,7 @@ module.exports = class ChromePlacesProvider {
 		}
 		newBookmark.bookmarkDateCreated = bookmark.dateAdded;
 		newBookmark.bookmarkGuid = bookmark.id;
+
 		return newBookmark;
 	}
 
