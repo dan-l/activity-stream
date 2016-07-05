@@ -37,14 +37,14 @@ function recentLinks(action) {
 }
 
 function highlightsLinks(action) {
-    ChromePlacesProvider.getHightlights()
+    ChromePlacesProvider.highlightsLinks()
       .then((highlights) => {
         dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
         // avoid holding up the init process
         // grab preview images asynchronously and dispatch them later
         ChromePlacesProvider.getHighlightsImg(highlights)
-          .then((r) => {
-            dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: r});
+          .then((higlightsWithImgs) => {
+            dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: higlightsWithImgs});
           });
       });
 }
@@ -99,20 +99,16 @@ function searchUIStrings(action) {
 }
 
 function visitHistory(result) {
-  const row = ChromePlacesProvider.transformHistory(result);
-  ChromePlacesProvider.addHistory(row).then((result) => {
-    ChromePlacesProvider.getHistory().then((histories) => {
-      dispatch({
-        type: "RECENT_LINKS_RESPONSE",
-        data: histories
-      });
+  ChromePlacesProvider.getHistory().then((histories) => {
+    dispatch({
+      type: "RECENT_LINKS_RESPONSE",
+      data: histories
     });
   });
 }
 
 function removeHistory(result) {
   result.urls.forEach((url) => {
-    ChromePlacesProvider.removeHistory(url);
     dispatch({
       type: "NOTIFY_HISTORY_DELETE",
       data: url
@@ -121,18 +117,16 @@ function removeHistory(result) {
 }
 
 function createBookmark(result) {
-  const isFolder = !result.url; if (isFolder) return;
-  const row = ChromePlacesProvider.transformBookmark(result);
-  ChromePlacesProvider.addBookmark(row);
+  const isFolder = !result.url;
+  if (isFolder) return;
   dispatch({
     type: "RECENT_BOOKMARKS_RESPONSE",
-    data: [row],
+    data: [result],
     meta: {prepend: true}
   });
 }
 
 function deleteBookmark(result) {
-  ChromePlacesProvider.removeBookmark(result);
   dispatch({
     type: "NOTIFY_BOOKMARK_DELETE",
     data: result
@@ -158,4 +152,8 @@ openNewWindow,
 searchSuggestions,
 performSearch,
 searchState,
-searchUIStrings};
+searchUIStrings,
+visitHistory,
+removeHistory,
+createBookmark,
+deleteBookmark};

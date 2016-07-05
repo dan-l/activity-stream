@@ -4,7 +4,7 @@ let _db = null;
 
 module.exports = class Db {
 	static init(keyStores) {
-		const initPromise = new Promise((resolve, reject) => {
+		const promise = new Promise((resolve, reject) => {
 			const request = indexedDB.open(DB_NAME, 1);
 
 			request.onerror = function(event) {
@@ -36,11 +36,11 @@ module.exports = class Db {
 			};
 		});
 
-		return initPromise;
+		return promise;
 	}
 
 	static addToDb(store, item) {
-		const addPromise = new Promise((resolve, reject) => {
+		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			let getRequest = objectStore.get(item[objectStore.keyPath]);
 			getRequest.onsuccess = function(event) {
@@ -63,11 +63,11 @@ module.exports = class Db {
 			};
 		});
 
-		return addPromise;
+		return promise;
 	}
 
 	static removeFromDb(store, key) {
-		const removePromise = new Promise((resolve, reject) => {
+		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const request = objectStore.delete(key);
 			request.onsuccess = function(event) {
@@ -75,11 +75,11 @@ module.exports = class Db {
 			};
 		});
 
-		return removePromise;
+		return promise;
 	}
 
 	static removeAllFromDb(store) {
-		const removePromise = new Promise((resolve, reject) => {
+		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const request = objectStore.clear();
 			request.onsuccess = function(event) {
@@ -87,11 +87,24 @@ module.exports = class Db {
 			};
 		});
 
-		return removePromise;
+		return promise;
 	}
 
-	static getFromDb(store, opt) {
-		const getPromise = new Promise((resolve, reject) => {
+	static getFromDb(store, item) {
+		const promise = new Promise((resolve, reject) => {
+			const objectStore = this._getObjectStore(store);
+			const request = objectStore.get(item[objectStore.keyPath]);
+			request.onsuccess = function(event) {
+				const value = request.result;
+				resolve(value);
+			};
+		});
+
+		return promise;
+	}
+
+	static getAllFromDb(store, opt) {
+		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const results = [];
 			const cursorReq = opt && opt.index ? objectStore.index(opt.index).openCursor(null, opt.direction) : objectStore.openCursor();
@@ -107,7 +120,7 @@ module.exports = class Db {
 			};
 		});
 
-		return getPromise;
+		return promise;
 	}
 
 	static _getObjectStore(store) {

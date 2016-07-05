@@ -1,107 +1,9 @@
 const db = require("addon-chrome/db");
 
-const {BOOKMARK, HISTORY, BLOCKED_URL, LAST_VISIT_TIME, DATE_ADDED, PREV} = require("addon-chrome/constants");
+const {BLOCKED_URL, METADATA} = require("addon-chrome/constants");
 const {getMetadata} = require("page-metadata-parser");
 
 module.exports = class ChromePlacesProvider {
-	static init() {
-		const historyPromise = this._getHistory();
-		const bookmarkPromise = this._getBookmark();
-
-		const promise = new Promise((resolve, reject) => {
-			Promise.all([historyPromise, bookmarkPromise]).then((results) => {
-				const histories = results[0];
-				const bookmarks = results[1];
-
-				bookmarks.forEach((r) => db.addToDb(BOOKMARK, r));
-				if (histories) {
-					this._setLastRequestTime(histories[0].lastVisitDate);
-					this._mergeLinks(histories, bookmarks)
-						.forEach((r) => db.addToDb(HISTORY, r));
-				}
-
-				resolve();
-			});
-		});
-
-		return promise;
-	}
-
-	static addBookmark(newBookmark) {
-		const bookmarkPromise = db.addToDb(BOOKMARK, newBookmark);
-		const historyPromise = db.addToDb(HISTORY, {url: newBookmark.url, bookmarkGuid: newBookmark.bookmarkGuid});
-
-		return Promise.all([bookmarkPromise, historyPromise]).then((results) => {
-			return results[0];
-		});
-	}
-
-	static removeBookmark(removeGuid) {
-		return db.removeFromDb(BOOKMARK, removeGuid);
-	}
-
-	static addHistory(newHistory) {
-		return db.getFromDb(BOOKMARK, {index: DATE_ADDED, direction: PREV})
-			.then((bookmarks) => {
-				const hist = this._mergeLinks([newHistory], bookmarks)[0];
-				return db.addToDb(HISTORY, hist);
-			});
-	}
-
-	static removeHistory(removeUrl) {
-		return db.removeFromDb(HISTORY, removeUrl);
-	}
-
-	static addBlockedUrl(blockedUrl) {
-		return db.addToDb(BLOCKED_URL, {url: blockedUrl});
-	}
-
-	static unblockAllUrl() {
-		return db.removeAllFromDb(BLOCKED_URL);
-	}
-
-	static getBookmark() {
-		const bookmarkPromise = new Promise((resolve, reject) => {
-			const dbPromise = db.getFromDb(BOOKMARK, {index: DATE_ADDED, direction: PREV});
-			const blockedUrlPromise = db.getFromDb(BLOCKED_URL);
-			Promise.all([dbPromise, blockedUrlPromise])
-				.then((results) => {
-					const bookmarks = this._filterBlockedUrls(results[0], results[1]);
-					resolve(bookmarks);
-				});
-		});
-
-		return bookmarkPromise;
-	}
-
-	static getHistory(options) {
-		const historyPromise = new Promise((resolve, reject) => {
-			if (options) {
-				this._getHistory(options).then((newHistories) => {
-					db.getFromDb(BOOKMARK, {index: DATE_ADDED, direction: PREV})
-						.then((bookmarks) => {
-							const mergedLinks = this._mergeLinks(newHistories, bookmarks);
-							mergedLinks.forEach((link) => db.addToDb(HISTORY, link));
-							db.getFromDb(BLOCKED_URL).then((blockedUrls) => {
-								const histories = this._filterBlockedUrls(mergedLinks, blockedUrls);
-								resolve(histories);
-							});
-						});
-				});
-			} else {
-				const dbPromise = db.getFromDb(HISTORY, {index: LAST_VISIT_TIME, direction: PREV});
-				const blockedUrlPromise = db.getFromDb(BLOCKED_URL);
-				Promise.all([dbPromise, blockedUrlPromise])
-					.then((results) => {
-						const histories = this._filterBlockedUrls(results[0], results[1]);
-						resolve(histories);
-					});
-			}
-		});
-
-		return historyPromise;
-	}
-
 	static topFrecentSites() {
 		const promise = new Promise((resolve, reject) => {
 			this.getHistory().then((histories) => {
@@ -112,7 +14,8 @@ module.exports = class ChromePlacesProvider {
 			    .map((hist) => {
 			      const microsecondsPerDay = 86400000000;
 			      const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
-			      return Object.assign(hist, {frencency: hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225))});
+			      const frencency = hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225));
+			      return Object.assign(hist, {frencency});
 			    })
 			    .sort((a, b) => {
 			      if (a.frencency > b.frencency) {
@@ -138,6 +41,15 @@ module.exports = class ChromePlacesProvider {
 				if (options && options.beforeDate) {
 					 rows = bookmarks.filter((bookmark) => bookmark.dateAdded < options.beforeDate);
 				}
+				rows.sort((a, b) => {
+					if (a.dateAdded > b.dateAdded) {
+						return -1;
+					}
+					if(a.dateAdded < b.dateAdded) {
+						return 1;
+					}
+					return 0;
+				});
 				resolve(rows);
 	    })
 		});
@@ -163,7 +75,7 @@ module.exports = class ChromePlacesProvider {
 		return promise;
 	}
 
-	static getHightlights() {
+	static highlightsLinks() {
 		const hightlightsPromise = new Promise((resolve, reject) => {
 			const bookmarkPromise = this.getBookmark();
 			const historyPromise = this.getHistory();
@@ -172,13 +84,14 @@ module.exports = class ChromePlacesProvider {
 
 			Promise.all([bookmarkPromise, historyPromise]).then((results) => {
 				const bookmarks = results[0];
-				const histories = this._mergeLinks(results[1], bookmarks);
+				const histories = results[1];
 
 				const rows = bookmarks.concat(histories)
-					.filter((r, index) =>
-						!/google/.test(r.url) &&
-							(today - (r.lastVisitDate || r.dateAdded)) > threeDays &&
-							(r.visitCount || 0) <= 3);
+					.filter((r, index) => {
+						const isThreeDaysOrOlder = (today - (r.lastVisitDate || r.dateAdded)) > threeDays;
+						const isVisitCountAtMostThree = (r.visitCount || 0) <= 3;
+						return !/google/.test(r.url) && isThreeDaysOrOlder && isVisitCountAtMostThree;
+					});
 
 				resolve(rows);
 			});
@@ -187,19 +100,80 @@ module.exports = class ChromePlacesProvider {
 		return hightlightsPromise;
 	}
 
+	static getBookmark() {
+		const promise = new Promise((resolve, reject) => {
+			chrome.bookmarks.getTree((trees) => {
+				const rawBookmarks = [];
+				this._collectBookmarks(trees, rawBookmarks);
+				const transformPromises = rawBookmarks
+					.filter((bookmark) => !!bookmark.url)
+					.map(this.transformBookmark);
+
+				Promise.all(transformPromises)
+					.then((bookmarks) => this._filterBlockedUrls(bookmarks).then(resolve));
+			});
+		});
+
+		return promise;
+	}
+
+	static getHistory(options) {
+		const aWeekAgo = new Date().getTime() - (7 * 24 * 60 * 60 * 1000);
+		const defaultOption = {
+			text: "",
+			startTime: aWeekAgo
+		};
+		const searchOptions = options ? Object.assign(defaultOption, options) : defaultOption;
+		const startTime = searchOptions.startTime;
+		const endTime = searchOptions.endTime;
+		const promise = new Promise((resolve, reject) => {
+			chrome.history.search(searchOptions, (results) => {
+				if (startTime && endTime) {
+					// api uses start and end time as OR instead of AND
+					// so filter it for now or we could just use this ???
+					results = results.filter((result) => result.lastVisitTime > startTime && result.lastVisitTime < endTime);
+				}
+				this.getBookmark().
+					then((bookmarks) => {
+						const transformPromises = results.map((result) => this.transformHistory(result, bookmarks));
+						Promise.all(transformPromises).
+							then((histories) => this._filterBlockedUrls(histories).then(resolve));
+					});
+			});
+		});
+
+		return promise;
+	}
+
+	static _filterBlockedUrls(items) {
+		const promise = new Promise((resolve, reject) => {
+			db.getAllFromDb(BLOCKED_URL)
+				.then((blockedUrls) => {
+					const nonBlockedUrls = items.filter((item) => blockedUrls.indexOf(item.url) === -1);
+					resolve(nonBlockedUrls);
+				});
+		});
+
+		return promise;
+	}
+
+	static addBlockedUrl(blockedUrl) {
+		return db.addToDb(BLOCKED_URL, {url: blockedUrl});
+	}
+
+	static unblockAllUrl() {
+		return db.removeAllFromDb(BLOCKED_URL);
+	}
+
 	static getHighlightsImg(sites) {
 		const imageWidth = 450;
 		const imageHeight = 278;
 
 		const highlightImgPromise = new Promise((resolve, reject) => {
-			const imgPromises = [];
-			for (let i = 0; i < sites.length; i++) {
-				let site = sites[i];
-				if (site.images) {
-					imgPromises.push(site);
-					continue;
-				}
-				const imgPromise = fetch(site.url)
+			const imgPromises = sites.map((site) => {
+				if (site.images) return site;
+
+				return fetch(site.url)
 					.then((r) => r.text())
 					.catch((ex) => imgPromises.push(site)) // can't preview sites like localhost
 					.then((r) => {
@@ -217,23 +191,19 @@ module.exports = class ChromePlacesProvider {
 							});
 						}
 
-						Object.assign(site, {images, description});
-
-						return site;
+						return Object.assign(site, {images, description});
 					});
-
-					imgPromises.push(imgPromise);
-			}
+			});
 
 			Promise.all(imgPromises).then((highlights) => {
 				highlights.forEach((highlight) => {
 					if (!highlight) return;
-					if (highlight.dateAdded) {
-						db.addToDb(BOOKMARK, highlight);
-					}
-					if (highlight.lastVisitTime) {
-						db.addToDb(HISTORY, highlight);
-					}
+					const metadata = {
+						url: highlight.url,
+						images: highlight.images,
+						description: highlight.description
+					};
+					db.addToDb(METADATA, metadata);
 				});
 				resolve(highlights);
 			});
@@ -242,98 +212,45 @@ module.exports = class ChromePlacesProvider {
 		return highlightImgPromise;
 	}
 
-	static _getBookmark() {
-		const bookmarkPromise = new Promise((resolve, reject) => {
-			chrome.bookmarks.getTree((trees) => {
-				const rows = this._processBookmarks(trees)
-					.filter((bookmark) => !!bookmark.url);
-				resolve(rows);
-			});
+	static transformHistory(hist, bookmarks) {
+		const promise = new Promise((resolve, reject) => {
+			db.getFromDb(METADATA, hist)
+				.then((metadata) => {
+					let mergedHist;
+					if (!metadata) {
+						mergedHist = this._mergeHistoryBookmark(hist, bookmarks);
+						this._storeLinkMetadata(mergedHist);
+					} else {
+						mergedHist = Object.assign(hist, metadata);
+					}
+					Object.assign(mergedHist, {
+						favicon_url: "chrome://favicon/" + hist.url,
+						lastVisitDate: parseInt(hist.lastVisitTime, 10)
+					});
+					resolve(mergedHist);
+				});
 		});
 
-		return bookmarkPromise;
+		return promise;
 	}
 
-	static _getHistory(options) {
-		const defaultOption = {
-			text: "",
-			startTime: this._getLastRequestTime() || new Date().getTime() - (7 * 24 * 60 * 60 * 1000)
-		};
-		const searchOptions = options ? Object.assign(defaultOption, options) : defaultOption;
-		const startTime = searchOptions.startTime;
-		const endTime = searchOptions.endTime;
-		const historyPromise = new Promise((resolve, reject) => {
-			chrome.history.search(searchOptions, (histories) => {
-				if (startTime && endTime) {
-					// api uses start and end time as OR instead of AND
-					// so filter it for now or we could just use this ???
-					histories = histories.filter((result) => result.lastVisitTime > startTime && result.lastVisitTime < endTime);
-				}
-				const rows = histories.map((result) => this.transformHistory(result));
-				resolve(rows);
-			});
-		});
-
-		return historyPromise;
-	}
-
-	static _setLastRequestTime(time) {
-		window.localStorage.setItem("lastrequestdate", time);
-	}
-
-	static _getLastRequestTime() {
-		return parseInt(window.localStorage.getItem("lastrequestdate"), 10);
-	}
-
-	static _filterBlockedUrls(items, blockedUrls) {
-		return items.filter((item) =>
-			blockedUrls.map((blocked) => blocked.url).indexOf(item.url) === -1);
-	}
-
-	static _mergeLinks(r1, r2) {
-		if(r1.length === 0) return r1;
-    // merge similiar entries from r2 into r1
-    const links = [];
-    const urls = r1.map((r) => r.url);
-    const urls2 = r2.map((r) => r.url);
-    urls.forEach((u, i) => {
-      const i2 = urls2.indexOf(u);
-      const link = r1[i];
-      if (i2 > -1) {
-        const link2 = r2[i2];
-        link.bookmarkGuid = link2.bookmarkGuid;
-      }
-      links.push(link);
-    });
-    return links;
-  }
-
-	static transformHistory(hist) {
-		return Object.assign(hist, {
-			favicon_url: "chrome://favicon/" + hist.url,
-			lastVisitDate: parseInt(hist.lastVisitTime, 10)
-		});
-	}
-
-	static _processBookmarks(trees) {
-		const bookmarks = [];
-		this._collectBookmarks(trees, bookmarks);
-
-		return bookmarks;
-	}
-
-	// keep all properties except for children
 	static transformBookmark(bookmark) {
-		const newBookmark = {};
-		for(const key in bookmark) {
-			if (bookmark.hasOwnProperty(key) && key !== "children") {
-				newBookmark[key] = bookmark[key];
-			}
-		}
-		newBookmark.bookmarkDateCreated = bookmark.dateAdded;
-		newBookmark.bookmarkGuid = bookmark.id;
+		const promise = new Promise((resolve, reject) => {
+			db.getFromDb(METADATA, bookmark)
+				.then((metadata) => {
+					if (metadata) {
+						Object.assign(bookmark, metadata);
+					}
+					Object.assign(bookmark, {
+							favicon_url: "chrome://favicon/" + bookmark.url,
+							bookmarkDateCreated: bookmark.dateAdded,
+							bookmarkGuid: bookmark.id
+						});
+					resolve(bookmark);
+				});
+		});
 
-		return newBookmark;
+		return promise;
 	}
 
 	// recursively traverse the tree of bookmarks and store them in an array
@@ -342,7 +259,25 @@ module.exports = class ChromePlacesProvider {
 			if (tree.children) {
 				this._collectBookmarks(tree.children, bookmarks);
 			}
-			bookmarks.push(this.transformBookmark(tree));
+			bookmarks.push(tree);
 		});
+	}
+
+	static _mergeHistoryBookmark(hist, bookmarks) {
+		const bookmarkUrls = bookmarks.map((bookmark) => bookmark.url);
+		const index = bookmarkUrls.indexOf(hist.url);
+		if (index > -1) {
+			Object.assign(hist, {bookmarkGuid: bookmarks[index].bookmarkGuid});
+		}
+		return hist;
+	}
+
+	static _storeLinkMetadata(link) {
+		if (link.bookmarkGuid) return;
+		const metadataObj = {
+			url: link.url,
+			bookmarkGuid: link.bookmarkGuid
+		};
+		db.addToDb(METADATA, metadataObj);
 	}
 };
