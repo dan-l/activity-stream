@@ -32,8 +32,6 @@ const engineUrlMap = {
 	Wikipedia: "https://en.wikipedia.org/wiki/Special:Search?search="
 };
 
-// TODO trim strings for search to match better
-
 module.exports = class ChromeSearchProvider {
 	static getEngines() {
 		return {
@@ -44,7 +42,7 @@ module.exports = class ChromeSearchProvider {
 
 	static getSearchUrl(searchString, engineName) {
 		const searchUrl = engineUrlMap[engineName];
-		const searchTerm = searchString.replace(/\s/g, "+");
+		const searchTerm = searchString.replace(/\s/g, "+").trim();
 
 		return searchUrl + searchTerm;
 	}
@@ -55,23 +53,25 @@ module.exports = class ChromeSearchProvider {
 		const suggestionsPromise = new Promise((resolve, reject) => {
 			ChromePlacesProvider.getHistory()
 				.then((histories) => {
-					const formHistory = this._dedupe(
-						this._dedupe(histories)
-							.filter((hist) => !!hist.title)
-							.map((hist) => Object.assign(hist, {distance: this._fuzzySearch(searchString.toLowerCase(), hist)}))
-							.filter((hist) => hist.distance !== 0)
-							.sort((a, b) => {
-								if (a.distance > b.distance) {
-									return -1;
-								}
-								if (a.distance < b.distance) {
-									return 1;
-								}
-								return 0;
-							})
-							.map((hist) => hist.title)
-							.slice(0, suggestionLength)
-					);
+					const titles = histories.map((hist) => hist.title);
+					let formHistory = histories
+						.filter((hist, index) => !!hist.title && (titles.indexOf(hist.title) === index))
+						.map((hist) => {
+							const distance = this._fuzzySearch(searchString.toLowerCase().trim(), hist);
+							return Object.assign(hist, {distance});
+						})
+						.filter((hist) => hist.distance !== 0)
+						.sort((a, b) => {
+							if (a.distance > b.distance) {
+								return -1;
+							}
+							if (a.distance < b.distance) {
+								return 1;
+							}
+							return 0;
+						})
+						.map((hist) => hist.title)
+						.slice(0, suggestionLength);
 
 					resolve({
 						suggestions: [searchString],
@@ -85,26 +85,43 @@ module.exports = class ChromeSearchProvider {
 	}
 
 	static _fuzzySearch(search, h) {
-			const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "");
-			const title = h.title.toLowerCase();
-			let vec1 = url.split(/[^A-Z^a-z^]+/).concat(title.split(/[^A-Z^a-z]+/)).filter((w) => !!w);
-			let vec2 = search.split(" ");
+			const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "").split(/[^A-Z^a-z^]+/);
+			const title = h.title.toLowerCase().split(/[^A-Z^a-z]+/);
+			let vec1 = this._dedupe(url.concat(title).filter((w) => !!w));
+			let vec2 = this._dedupe(search.split(" "));
 			const allColumns = this._dedupe(vec1.concat(vec2));
-			vec1 = this._transformVectors(allColumns, vec1);
-			vec2 = this._transformVectors(allColumns, vec2);
-			const score = this._pearson(vec1, vec2);
+			const score = this._tanimoto(allColumns, vec1, vec2);
 
 			return score;
 	}
 
-	static _computeVectors(h) {
-		const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "").split(/[^A-Z^a-z^]+/);
-		const title = h.title.toLowerCase().split(/[^A-Z^a-z]+/);
-		return this._dedupe(url.concat(title).filter((w) => !!w && w.length > 1));
+	static _transformVectors(allColumns, vec) {
+		return allColumns.map((col) => vec.indexOf(col) > -1 ? 1 : 0);
 	}
 
-	static _transformVectors(allColumns, vec) {
-		return allColumns.map((col) => vec.reduce((acc, curr) => acc + (col === curr) | 0, 0));
+	static _tanimoto(allColumns, v1, v2) {
+		let c1 = 0;
+		let c2 = 0;
+		let shr = 0;
+		allColumns.forEach((col) => {
+			const index1 = v1.indexOf(col) > -1;
+			const index2 = v2.indexOf(col) > -1;
+			if (index1)	 {
+				c1 += 1;
+			}
+			if (index2) {
+				c2 += 1;
+			}
+			if (index1 && index2) {
+				shr += 1;
+			}
+		});
+
+		const combined = (c1 + c2 + shr);
+
+		if (combined === 0) return 0;
+
+		return shr / combined;
 	}
 
 	static _pearson(v1, v2) {
@@ -140,8 +157,8 @@ module.exports = class ChromeSearchProvider {
     }, 0);
   }
 
-  static _dedupe(array) {
-		return array.filter((v, index, array) => array.indexOf(v) === index);
+  static _dedupe(array, key) {
+		return array.filter((val, index, array) => array.indexOf(val) === index);
   }
 
 };

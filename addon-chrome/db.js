@@ -2,6 +2,8 @@ const DB_NAME = "activitystream";
 const DB_MODE = "readwrite";
 let _db = null;
 
+// TODO: review this
+
 module.exports = class Db {
 	static init(keyStores) {
 		const promise = new Promise((resolve, reject) => {

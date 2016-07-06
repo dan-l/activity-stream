@@ -7,27 +7,27 @@ module.exports = class ChromePlacesProvider {
 	static topFrecentSites() {
 		const promise = new Promise((resolve, reject) => {
 			this.getHistory().then((histories) => {
-			  // https://dxr.mozilla.org/mozilla-central/source/mobile/android/base/java/org/mozilla/gecko/db/BrowserContract.java#124
-			  // numVisits * max(1, 100 * 225 / (age*age + 225))
-			  const rows = histories
-			    .filter((hist) => !/google/.test(hist.url))
-			    .map((hist) => {
-			      const microsecondsPerDay = 86400000000;
-			      const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
-			      const frencency = hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225));
-			      return Object.assign(hist, {frencency});
-			    })
-			    .sort((a, b) => {
-			      if (a.frencency > b.frencency) {
-			        return -1;
-			      }
-			      if (a.frencency < b.frencency) {
-			        return 1;
-			      }
-			      return 0;
-			    });
+			// https://dxr.mozilla.org/mozilla-central/source/mobile/android/base/java/org/mozilla/gecko/db/BrowserContract.java#124
+			// numVisits * max(1, 100 * 225 / (age*age + 225))
+			const rows = histories
+				.filter((hist) => !/google/.test(hist.url))
+				.map((hist) => {
+					const microsecondsPerDay = 86400000000;
+					const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
+					const frencency = hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225));
+					return Object.assign(hist, {frencency});
+				})
+				.sort((a, b) => {
+					if (a.frencency > b.frencency) {
+						return -1;
+					}
+					if (a.frencency < b.frencency) {
+						return 1;
+					}
+					return 0;
+				});
 
-			  resolve(rows);
+				resolve(rows);
 			});
 		});
 
@@ -39,7 +39,7 @@ module.exports = class ChromePlacesProvider {
 			this.getBookmark().then((bookmarks) => {
 				let rows = bookmarks;
 				if (options && options.beforeDate) {
-					 rows = bookmarks.filter((bookmark) => bookmark.dateAdded < options.beforeDate);
+					rows = bookmarks.filter((bookmark) => bookmark.dateAdded < options.beforeDate);
 				}
 				rows.sort((a, b) => {
 					if (a.dateAdded > b.dateAdded) {
@@ -51,7 +51,7 @@ module.exports = class ChromePlacesProvider {
 					return 0;
 				});
 				resolve(rows);
-	    })
+			});
 		});
 
 		return promise;
@@ -61,15 +61,17 @@ module.exports = class ChromePlacesProvider {
 		const promise = new Promise((resolve, reject) => {
 			let searchOptions;
 			if (options && options.beforeDate) {
-		    // Since 1 day might be too small a gap if we didn't browse
-		    // but is 1 week the right choice?
-			  const aWeekAgo = options.beforeDate - (7 * 24 * 60 * 60 * 1000);
+				// Since 1 day might be too small a gap if we didn't browse
+				// but is 1 week the right choice?
+				const aWeek = 7 * 24 * 60 * 60 * 1000;
+				const aWeekAgo = options.beforeDate - aWeek;
 				searchOptions = {
 					startTime: aWeekAgo,
 					endTime: options.beforeDate
 				};
 			}
-	    this.getHistory(searchOptions).then(resolve);
+
+			this.getHistory(searchOptions).then(resolve);
 		});
 
 		return promise;
@@ -118,10 +120,15 @@ module.exports = class ChromePlacesProvider {
 	}
 
 	static getHistory(options) {
-		const aWeekAgo = new Date().getTime() - (7 * 24 * 60 * 60 * 1000);
+		const today = new Date().getTime();
+		// Try to get as far back as possible, 1 year seems to be a reasonable time for now
+		const aYear = 365 * 24 * 60 * 60 * 1000;
+		const aYearAgo = today - aYear;
 		const defaultOption = {
 			text: "",
-			startTime: aWeekAgo
+			startTime: aYearAgo,
+			endTime: today,
+			maxResults: 1000000
 		};
 		const searchOptions = options ? Object.assign(defaultOption, options) : defaultOption;
 		const startTime = searchOptions.startTime;

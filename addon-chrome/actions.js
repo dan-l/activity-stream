@@ -1,6 +1,10 @@
 const ChromePlacesProvider = require("addon-chrome/ChromePlacesProvider");
 const ChromeSearchProvider = require("addon-chrome/ChromeSearchProvider");
 const {ADDON_TO_CONTENT} = require("common/event-constants");
+const {SEARCH_HEADER,
+SEARCH_FOR_SOMETHING,
+SEARCH_SETTINGS,
+SEARCH_PLACEHOLDER} = require("addon-chrome/constants");
 
 function topFrecentSites(action) {
   ChromePlacesProvider.topFrecentSites()
@@ -90,10 +94,10 @@ function performSearch(action) {
 
 function searchUIStrings(action) {
   const uiStrings = {
-    "searchHeader": "%S Search",
-    "searchForSomethingWith": "Search for %S with",
-    "searchSettings": "Change Search Settings",
-    "searchPlaceholder": "Search the Web"
+    "searchHeader": SEARCH_HEADER,
+    "searchForSomethingWith": SEARCH_FOR_SOMETHING,
+    "searchSettings": SEARCH_SETTINGS,
+    "searchPlaceholder": SEARCH_PLACEHOLDER
   };
   dispatch({type: "SEARCH_UISTRINGS_RESPONSE", data: uiStrings});
 }
