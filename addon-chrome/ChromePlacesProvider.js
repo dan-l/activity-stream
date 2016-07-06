@@ -154,7 +154,7 @@ module.exports = class ChromePlacesProvider {
 
 	static _filterBlockedUrls(items) {
 		const promise = new Promise((resolve, reject) => {
-			db.getAllFromDb(BLOCKED_URL)
+			db.getAll(BLOCKED_URL)
 				.then((blockedUrls) => {
 					const nonBlockedUrls = items.filter((item) => blockedUrls.indexOf(item.url) === -1);
 					resolve(nonBlockedUrls);
@@ -165,11 +165,11 @@ module.exports = class ChromePlacesProvider {
 	}
 
 	static addBlockedUrl(blockedUrl) {
-		return db.addToDb(BLOCKED_URL, {url: blockedUrl});
+		return db.addOrUpdateExisting(BLOCKED_URL, {url: blockedUrl});
 	}
 
 	static unblockAllUrl() {
-		return db.removeAllFromDb(BLOCKED_URL);
+		return db.removeAll(BLOCKED_URL);
 	}
 
 	static getHighlightsImg(sites) {
@@ -210,7 +210,7 @@ module.exports = class ChromePlacesProvider {
 						images: highlight.images,
 						description: highlight.description
 					};
-					db.addToDb(METADATA, metadata);
+					db.addOrUpdateExisting(METADATA, metadata);
 				});
 				resolve(highlights);
 			});
@@ -221,7 +221,7 @@ module.exports = class ChromePlacesProvider {
 
 	static transformHistory(hist, bookmarks) {
 		const promise = new Promise((resolve, reject) => {
-			db.getFromDb(METADATA, hist)
+			db.getItem(METADATA, hist)
 				.then((metadata) => {
 					let mergedHist;
 					if (!metadata) {
@@ -243,7 +243,7 @@ module.exports = class ChromePlacesProvider {
 
 	static transformBookmark(bookmark) {
 		const promise = new Promise((resolve, reject) => {
-			db.getFromDb(METADATA, bookmark)
+			db.getItem(METADATA, bookmark)
 				.then((metadata) => {
 					if (metadata) {
 						Object.assign(bookmark, metadata);
@@ -285,6 +285,6 @@ module.exports = class ChromePlacesProvider {
 			url: link.url,
 			bookmarkGuid: link.bookmarkGuid
 		};
-		db.addToDb(METADATA, metadataObj);
+		db.addOrUpdateExisting(METADATA, metadataObj);
 	}
 };

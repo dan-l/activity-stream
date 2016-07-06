@@ -1,5 +1,4 @@
 const ChromeActivityStreams = require("addon-chrome/ChromeActivityStreams");
-const {BLOCKED_URL, METADATA, URL} = require("addon-chrome/constants");
 const Db = require("addon-chrome/db");
 
 const React = require("react");
@@ -12,15 +11,7 @@ const store = require("content-src/store");
 // TODO linting, code analysis
 // TODO docs
 
-const keyStores = {};
-keyStores[BLOCKED_URL] = {
-	keyPath: URL
-};
-keyStores[METADATA] = {
-	keyPath: URL
-};
-
-Db.init(keyStores).then(() => {
+Db.init().then(() => {
 	new ChromeActivityStreams();
 	const Root = React.createClass({
 		render() {

@@ -1,47 +1,71 @@
+const {BLOCKED_URL, METADATA, URL} = require("addon-chrome/constants");
+
+const DB_VERSION = 1;
 const DB_NAME = "activitystream";
 const DB_MODE = "readwrite";
 let _db = null;
 
-// TODO: review this
-
 module.exports = class Db {
-	static init(keyStores) {
+	static init() {
 		const promise = new Promise((resolve, reject) => {
-			const request = indexedDB.open(DB_NAME, 1);
+			const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-			request.onerror = function(event) {
+			request.onerror = (event) => {
 				throw new Error("IndexedDB not available?!");
 			};
 
-			request.onsuccess = function(event) {
+			request.onsuccess = (event) => {
 				if (event.target.result.objectStoreNames.length > 0) {
 					_db = event.target.result;
 					resolve();
 				}
 			};
 
-			request.onupgradeneeded = function(event) {
+			request.onupgradeneeded = (event) =>  {
 				_db = event.target.result;
-				const stores = [];
-				for(const store in keyStores) {
-					const keyPath = keyStores[store].keyPath;
-					stores.push(store);
-					const objectStore = _db.createObjectStore(store, {keyPath});
-					const index = keyStores[store].index;
-					if (index) {
-						objectStore.createIndex(index, index, {unique: true});
-					}
-					objectStore.transaction.oncomplete = function(event) {
-						resolve();
-					};
+				const version = _db.version;
+				switch (version) {
+					case 1:
+						this._version1(resolve);
+						break;
 				}
+
 			};
 		});
 
 		return promise;
 	}
 
-	static addToDb(store, item) {
+	static _currentSchema() {
+		let schema = {};
+		schema[1] = {};
+		schema[1][BLOCKED_URL] = {
+			keyPath: URL
+		};
+		schema[1][METADATA] = {
+			keyPath: URL
+		};
+		return schema[DB_VERSION];
+	}
+
+	static _version1(resolve) {
+		const keyStores = this._currentSchema();
+		const stores = [];
+		for(const store in keyStores) {
+			const keyPath = keyStores[store].keyPath;
+			stores.push(store);
+			const objectStore = _db.createObjectStore(store, {keyPath});
+			const index = keyStores[store].index;
+			if (index !== undefined) {
+				objectStore.createIndex(index, index, {unique: true});
+			}
+			objectStore.transaction.oncomplete = function(event) {
+				resolve();
+			};
+		}
+	}
+
+	static addOrUpdateExisting(store, item) {
 		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			let getRequest = objectStore.get(item[objectStore.keyPath]);
@@ -68,7 +92,7 @@ module.exports = class Db {
 		return promise;
 	}
 
-	static removeFromDb(store, key) {
+	static remove(store, key) {
 		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const request = objectStore.delete(key);
@@ -80,7 +104,7 @@ module.exports = class Db {
 		return promise;
 	}
 
-	static removeAllFromDb(store) {
+	static removeAll(store) {
 		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const request = objectStore.clear();
@@ -92,7 +116,7 @@ module.exports = class Db {
 		return promise;
 	}
 
-	static getFromDb(store, item) {
+	static getItem(store, item) {
 		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const request = objectStore.get(item[objectStore.keyPath]);
@@ -105,11 +129,16 @@ module.exports = class Db {
 		return promise;
 	}
 
-	static getAllFromDb(store, opt) {
+	static getAll(store, opt) {
 		const promise = new Promise((resolve, reject) => {
 			const objectStore = this._getObjectStore(store);
 			const results = [];
-			const cursorReq = opt && opt.index ? objectStore.index(opt.index).openCursor(null, opt.direction) : objectStore.openCursor();
+			let cursorReq;
+			if (opt && opt.index) {
+				cursorReq = objectStore.index(opt.index).openCursor(null, opt.direction);
+			} else {
+				cursorReq = objectStore.openCursor();
+			}
 			cursorReq.onsuccess = function(event) {
 				const cursor = event.target.result;
 				if (cursor) {
