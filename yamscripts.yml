@@ -76,3 +76,5 @@ scripts:
     pre: npm run cleanChrome && npm run copyTestImagesChrome && npm run copyTopSitesJsonChrome
     bundleChrome: cpx "content-src/static/**/*" addon-chrome/content && node-sass content-src/main.scss -o addon-chrome/content && node ./addon-chrome/bin/generate-chrome-html.js > addon-chrome/content/activity-streams.html && webpack --config webpack.chrome.config.js
     postChrome: du -hs ./addon-chrome/content/*
+
+  analyze: rimraf report && mkdirp report && plato -r -d report -l .jshintrc -t "Activity Stream Chrome Extension" -x "addon-chrome/content|addon-chrome/bin" addon-chrome

@@ -8,9 +8,6 @@ const {Provider} = require("react-redux");
 const Routes = require("components/Routes/Routes");
 const store = require("content-src/store");
 
-// TODO linting, code analysis
-// TODO docs
-
 Db.init().then(() => {
   new ChromeActivityStreams();
   const Root = React.createClass({

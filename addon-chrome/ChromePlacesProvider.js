@@ -4,11 +4,16 @@ const {BLOCKED_URL, METADATA} = require("addon-chrome/constants");
 const {getMetadata} = require("page-metadata-parser");
 
 module.exports = class ChromePlacesProvider {
+  /**
+   * Calculate frecency scores for each history items (except google searches) base on
+   * https://dxr.mozilla.org/mozilla-central/source/mobile/android/base/java/org/mozilla/gecko/db/BrowserContract.java#124
+   * numVisits * max(1, 100 * 225 / (age*age + 225))
+   *
+   * @returns {Object} Promise that resolves with a list of items that is sorted descendingly by it's frecency score
+   */
   static topFrecentSites() {
     const promise = new Promise((resolve, reject) => {
       this.getHistory().then((histories) => {
-        // https://dxr.mozilla.org/mozilla-central/source/mobile/android/base/java/org/mozilla/gecko/db/BrowserContract.java#124
-        // numVisits * max(1, 100 * 225 / (age*age + 225))
         const rows = histories
           .filter((hist) => !/google/.test(hist.url))
           .map((hist) => {
@@ -34,6 +39,13 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Get either all the bookmarks or bookmarks before a specified date
+   *
+   * @param {Object} options - Search options config
+   * @param {string} options.beforeDate - Limit results to before this date, represented in milliseconds
+   * @returns {Object} Promise that resolves with the bookmarks sorted ascendingly by the date the bookmark is added
+   */
   static recentBookmarks(options) {
     const promise = new Promise((resolve, reject) => {
       this.getBookmark().then((bookmarks) => {
@@ -57,6 +69,13 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Get either all the histories or histoires before a specified date
+   *
+   * @param {Object} options - Search options config
+   * @param {string} options.beforeDate - Limit results to before this date, represented in milliseconds
+   * @returns {Object} Promise that resolves with histories
+   */
   static recentLinks(options) {
     const promise = new Promise((resolve, reject) => {
       let searchOptions;
@@ -77,8 +96,15 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Get a list of items that are not google searches as highlights if they:
+   * 1) Haven't been visited for more than 3 days
+   * 2) Visited at most 3 times
+   *
+   * @returns {Object} Promise that resolves with a list of highlight items
+   */
   static highlightsLinks() {
-    const hightlightsPromise = new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
       const bookmarkPromise = this.getBookmark();
       const historyPromise = this.getHistory();
       const threeDays = 3 * 24 * 60 * 60 * 1000;
@@ -99,9 +125,14 @@ module.exports = class ChromePlacesProvider {
       });
     });
 
-    return hightlightsPromise;
+    return promise;
   }
 
+  /**
+   * Query Chrome bookmark api for all the bookmarks and transform them into activity stream bookmark items
+   *
+   * @returns {Object} Promise that resolves with bookmarks
+   */
   static getBookmark() {
     const promise = new Promise((resolve, reject) => {
       chrome.bookmarks.getTree((trees) => {
@@ -119,9 +150,14 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Query Chrome history api for all the history (need to supply a range to api as default is 24 hours. Chose to be as far back as a year, which seems to be a reasonable time for now) and transform them into activity stream history items
+   *
+   * @param {Object} options - Search options config
+   * @returns {Object} Promise that resolves with histories
+   */
   static getHistory(options) {
     const today = new Date().getTime();
-    // Try to get as far back as possible, 1 year seems to be a reasonable time for now
     const aYear = 365 * 24 * 60 * 60 * 1000;
     const aYearAgo = today - aYear;
     const defaultOption = {
@@ -143,8 +179,8 @@ module.exports = class ChromePlacesProvider {
         this.getBookmark()
           .then((bookmarks) => {
             const transformPromises = results.map((result) => this.transformHistory(result, bookmarks));
-            Promise.all(transformPromises).
-            then((histories) => this._filterBlockedUrls(histories).then(resolve));
+            Promise.all(transformPromises)
+             .then((histories) => this._filterBlockedUrls(histories).then(resolve));
           });
       });
     });
@@ -152,6 +188,12 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Filters out the blocked urls from a list of item
+   *
+   * @param {Array} items - List of items that needs to be filtered
+   * @returns {Object} Promise that resolves with a list of urls that are not in the blocked list
+   */
   static _filterBlockedUrls(items) {
     const promise = new Promise((resolve, reject) => {
       db.getAll(BLOCKED_URL)
@@ -164,14 +206,31 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Add blocked urls to db
+   *
+   * @param {string} blockedUrl - Url that is marked for block
+   * @returns {Object} Promise that resolves when the db is done adding or updating
+   */
   static addBlockedUrl(blockedUrl) {
     return db.addOrUpdateExisting(BLOCKED_URL, {url: blockedUrl});
   }
 
+  /**
+   * Remove blocked urls from db
+   *
+   * @returns {Object} Promise that resolves when the db transaction is done removing all
+   */
   static unblockAllUrl() {
     return db.removeAll(BLOCKED_URL);
   }
 
+  /**
+   * Fetches images and description for a list of sites
+   *
+   * @param {Array} sites - List of sites to get highlight images for
+   * @returns {Object} Promise that resolves with list of sites and their highlight images
+   */
   static getHighlightsImg(sites) {
     const imageWidth = 450;
     const imageHeight = 278;
@@ -223,6 +282,14 @@ module.exports = class ChromePlacesProvider {
     return highlightImgPromise;
   }
 
+  /**
+   * Transform a raw history bookmark item into activity stream's history item,
+   * merge the history item with the bookmark item that shares it's url if it hasn't and merge it's metadata
+   *
+   * @param {Object} hist - History item to be transformed
+   * @param {Object} bookmarks - List of bookmarks
+   * @returns {Object} Promise that resolves with the history item has been transformed
+   */
   static transformHistory(hist, bookmarks) {
     const promise = new Promise((resolve, reject) => {
       db.getItem(METADATA, hist)
@@ -245,6 +312,12 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
+  /**
+   * Transform a raw chrome bookmark item into activity stream's bookmark item and merge it's metadata
+   *
+   * @param {Object} bookmark - Bookmark to be transformed
+   * @returns {Object} Promise that resolves with the bookmark has been transformed
+   */
   static transformBookmark(bookmark) {
     const promise = new Promise((resolve, reject) => {
       db.getItem(METADATA, bookmark)
@@ -264,7 +337,12 @@ module.exports = class ChromePlacesProvider {
     return promise;
   }
 
-  // recursively traverse the tree of bookmarks and store them in an array
+  /**
+   * Recursively traverse the tree of bookmarks and store them in an array
+   *
+   * @param {Array} trees - Root of a Chrome bookmark tree item
+   * @param {Array} bookmarks - List of bookmarks accumulated by traversing the tree
+   */
   static _collectBookmarks(trees, bookmarks) {
     trees.forEach((tree) => {
       if (tree.children) {
@@ -274,6 +352,13 @@ module.exports = class ChromePlacesProvider {
     });
   }
 
+  /**
+   * Merge a history item and a bookmark item that shares the same url into a single item
+   *
+   * @param {Object} hist - History item
+   * @param {Array} bookmarks - List of bookmarks
+   * @returns {Object} The merged history and bookmark item if they share the same url
+   */
 	static _mergeHistoryBookmark(hist, bookmarks) {
     const bookmarkUrls = bookmarks.map((bookmark) => bookmark.url);
     const index = bookmarkUrls.indexOf(hist.url);
@@ -283,6 +368,13 @@ module.exports = class ChromePlacesProvider {
     return hist;
   }
 
+  /**
+   * Store metadata associated with the link
+   *
+   * @param {Object} link - Link config
+   * @param {string} link.bookmarkGuid - Link's bookmark id
+   * @param {string} link.url - Link's url
+   */
   static _storeLinkMetadata(link) {
     if (link.bookmarkGuid) {
       return;

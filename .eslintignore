@@ -3,3 +3,4 @@ addon-chrome/content/
 logs/
 firefox/
 lib/vendor.bundle.js
+report/

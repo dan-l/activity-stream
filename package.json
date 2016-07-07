@@ -188,6 +188,7 @@
     "prechrome": "npm run cleanChrome && npm run copyTestImagesChrome && npm run copyTopSitesJsonChrome",
     "chrome:bundleChrome": "cpx \"content-src/static/**/*\" addon-chrome/content && node-sass content-src/main.scss -o addon-chrome/content && node ./addon-chrome/bin/generate-chrome-html.js > addon-chrome/content/activity-streams.html && webpack --config webpack.chrome.config.js",
     "chrome:postChrome": "du -hs ./addon-chrome/content/*",
+    "analyze": "rimraf report && mkdirp report && plato -r -d report -l .jshintrc -t \"Activity Stream Chrome Extension\" -x \"addon-chrome/content|addon-chrome/bin\" addon-chrome",
     "help": "yamscripts help",
     "yamscripts": "yamscripts compile",
     "__": "# NOTE: THESE SCRIPTS ARE COMPILED!!! EDIT yamscripts.yml instead!!!"

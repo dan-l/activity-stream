@@ -33,6 +33,11 @@ const engineUrlMap = {
 };
 
 module.exports = class ChromeSearchProvider {
+  /**
+   * Get the search engines config
+   *
+   * @returns {Object} Config of the current search engine and a list of configs for other available search engines
+   */
   static getEngines() {
     return {
       currentEngine: JSON.stringify(engines[0]),
@@ -40,6 +45,13 @@ module.exports = class ChromeSearchProvider {
     };
   }
 
+  /**
+   * Get the search url for a given search term and chosen search engine
+   *
+   * @param {string} searchString - Search term
+   * @param {string} engineName - Name of the search engine chosen
+   * @returns {string} Search url
+   */
   static getSearchUrl(searchString, engineName) {
     const searchUrl = engineUrlMap[engineName];
     const searchTerm = searchString.replace(/\s/g, "+").trim();
@@ -47,6 +59,12 @@ module.exports = class ChromeSearchProvider {
     return searchUrl + searchTerm;
   }
 
+  /**
+   * Get suggestions for a given search term using browsing history items
+   *
+   * @param {string} searchString - Search term
+   * @returns {Object} Suggesions and history related to the given search term
+   */
   static getSuggestions(searchString) {
     const suggestionLength = 6;
 
@@ -57,7 +75,7 @@ module.exports = class ChromeSearchProvider {
           let formHistory = histories
             .filter((hist, index) => !!hist.title && (titles.indexOf(hist.title) === index))
             .map((hist) => {
-              const distance = this._fuzzySearch(searchString.toLowerCase().trim(), hist);
+              const distance = this._searchDistance(searchString.toLowerCase().trim(), hist);
               return Object.assign(hist, {distance});
             })
 						.filter((hist) => hist.distance !== 0)
@@ -84,9 +102,16 @@ module.exports = class ChromeSearchProvider {
     return suggestionsPromise;
   }
 
-  static _fuzzySearch(search, h) {
-    const url = h.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "").split(/[^A-Z^a-z^]+/);
-    const title = h.title.toLowerCase().split(/[^A-Z^a-z]+/);
+  /**
+   * Calculate the distance between an history item and the search term base on it's url and title
+   *
+   * @param {string} search - Search term
+   * @param {string} hist - History item
+   * @returns {number} The distance
+   */
+  static _searchDistance(search, hist) {
+    const url = hist.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "").split(/[^A-Z^a-z^]+/);
+    const title = hist.title.toLowerCase().split(/[^A-Z^a-z]+/);
     let vec1 = this._dedupe(url.concat(title).filter((w) => !!w));
     let vec2 = this._dedupe(search.split(" "));
     const allColumns = this._dedupe(vec1.concat(vec2));
@@ -95,10 +120,14 @@ module.exports = class ChromeSearchProvider {
     return score;
   }
 
-  static _transformVectors(allColumns, vec) {
-    return allColumns.map((col) => vec.indexOf(col) > -1 ? 1 : 0);
-  }
-
+  /**
+   * Distance algorithm that computes a score base on the number of intersected items between 2 vectors
+   *
+   * @param {Array} allColumns - All the items combined from the 2 vectors
+   * @param {Array} v1 - First vector to be compared
+   * @param {Array} v2 - Second vector to be compared
+   * @returns {number} Tanimoto score
+   */
   static _tanimoto(allColumns, v1, v2) {
     let c1 = 0;
     let c2 = 0;
@@ -126,40 +155,13 @@ module.exports = class ChromeSearchProvider {
     return shr / combined;
   }
 
-  static _pearson(v1, v2) {
-    let size = v1.length;
-
-    let sum1 = this._sum(v1);
-    let sum2 = this._sum(v2);
-
-    let sumOfSquares1 = this._sum(v1.map((v) => {
-      return Math.pow(v, 2);
-    }));
-    let sumOfSquares2 = this._sum(v2.map((v) => {
-      return Math.pow(v, 2);
-    }));
-
-    let sumOfProducts = this._sum(v1.map((v, i) => {
-      return v * v2[i];
-    }));
-
-    let num = sumOfProducts - (sum1 * sum2 / size);
-    let den = Math.sqrt((sumOfSquares1 - Math.pow(sum1, 2) / size) * (sumOfSquares2 - Math.pow(sum2, 2) / size));
-
-    if (den === 0) {
-      return 0;
-    }
-
-    return num / den;
-  }
-
-  static _sum(list) {
-    return list.reduce((memo, num) => {
-      return memo + num;
-    }, 0);
-  }
-
-  static _dedupe(array, key) {
+  /**
+   * Deduplicate items in an array
+   *
+   * @param {Array} array - Array to be deduplicated
+   * @returns {Array} Array that contains only unique elements
+   */
+  static _dedupe(array) {
     return array.filter((val, index, array) => array.indexOf(val) === index);
   }
 };

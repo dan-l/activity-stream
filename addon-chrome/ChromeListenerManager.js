@@ -5,6 +5,10 @@ module.exports = class ChromeListenerManager {
     this._setupListeners();
   }
 
+  /**
+   * Sets up listeners for events fired by Chrome browser and
+   * routes them to appropriate action handler
+   */
   _setupListeners() {
     this._historyVisitedListener();
     this._historyRemovedListener();

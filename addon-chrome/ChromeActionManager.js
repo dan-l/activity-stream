@@ -19,6 +19,10 @@ module.exports = class ChromeActionManager {
     this._setupListeners();
   }
 
+  /**
+   * Sets up listeners that responds to the actions dispatched from the content
+   * and routes them to appropriate action handler
+   */
   _setupListeners() {
     window.addEventListener(CONTENT_TO_ADDON, (event) => {
       const action = JSON.parse(event.detail);
