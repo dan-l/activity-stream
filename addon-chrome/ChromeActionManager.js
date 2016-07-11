@@ -15,12 +15,12 @@ searchState,
 searchUIStrings} = require("addon-chrome/actions");
 
 module.exports = class ChromeActionManager {
-	constructor() {
-		this._setupListeners();
-	}
+  constructor() {
+    this._setupListeners();
+  }
 
-	_setupListeners() {
-		window.addEventListener(CONTENT_TO_ADDON, (event) => {
+  _setupListeners() {
+    window.addEventListener(CONTENT_TO_ADDON, (event) => {
       const action = JSON.parse(event.detail);
       switch (action.type) {
         case "TOP_FRECENT_SITES_REQUEST":
@@ -67,7 +67,6 @@ module.exports = class ChromeActionManager {
           break;
       }
     });
-	}
+  }
 };
-
 

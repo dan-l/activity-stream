@@ -20,8 +20,8 @@ function recentBookmarks(action) {
         meta: {append: true}
       }));
   } else {
-      ChromePlacesProvider.recentBookmarks()
-       .then((data) => dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data}));
+    ChromePlacesProvider.recentBookmarks()
+     .then((data) => dispatch({type: "RECENT_BOOKMARKS_RESPONSE", data}));
   }
 }
 
@@ -41,7 +41,7 @@ function recentLinks(action) {
 }
 
 function highlightsLinks(action) {
-    ChromePlacesProvider.highlightsLinks()
+  ChromePlacesProvider.highlightsLinks()
       .then((highlights) => {
         dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
         // avoid holding up the init process
@@ -122,7 +122,9 @@ function removeHistory(result) {
 
 function createBookmark(result) {
   const isFolder = !result.url;
-  if (isFolder) return;
+  if (isFolder) {
+    return;
+  }
   dispatch({
     type: "RECENT_BOOKMARKS_RESPONSE",
     data: [result],

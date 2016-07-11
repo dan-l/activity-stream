@@ -12,15 +12,15 @@ const store = require("content-src/store");
 // TODO docs
 
 Db.init().then(() => {
-	new ChromeActivityStreams();
-	const Root = React.createClass({
-		render() {
-			return (<Provider store={store}>
-				<Routes />
-			</Provider>);
-		}
-	});
+  new ChromeActivityStreams();
+  const Root = React.createClass({
+    render() {
+      return (<Provider store={store}>
+                <Routes />
+             </Provider>);
+    }
+  });
 
-	ReactDOM.render(<Root />, document.getElementById("root"));
+  ReactDOM.render(<Root />, document.getElementById("root"));
 });
 

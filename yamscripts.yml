@@ -64,3 +64,15 @@ scripts:
   # This is just to make sure we don't make commits with failing tests
   # or uncompiled yamscripts.yml. Run automatically with husky.
   prepush: =>test:lint && =>yamscripts
+
+  # chrome: Build for chrome extension
+  cleanChrome: rimraf addon-chrome/content/* && mkdirp addon-chrome/content
+
+  copyTestImagesChrome: cpx "node_modules/tippy-top-sites/images/**/*" addon-chrome/content/favicons/images
+
+  copyTopSitesJsonChrome: cpx "node_modules/tippy-top-sites/top_sites.json" addon-chrome/content/favicons
+
+  chrome:
+    pre: npm run cleanChrome && npm run copyTestImagesChrome && npm run copyTopSitesJsonChrome
+    bundleChrome: cpx "content-src/static/**/*" addon-chrome/content && node-sass content-src/main.scss -o addon-chrome/content && node ./addon-chrome/bin/generate-chrome-html.js > addon-chrome/content/activity-streams.html && webpack --config webpack.chrome.config.js
+    postChrome: du -hs ./addon-chrome/content/*
