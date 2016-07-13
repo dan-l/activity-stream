@@ -77,4 +77,16 @@ scripts:
     bundleChrome: cpx "content-src/static/**/*" addon-chrome/content && node-sass content-src/main.scss -o addon-chrome/content && node ./addon-chrome/bin/generate-chrome-html.js > addon-chrome/content/activity-streams.html && webpack --config webpack.chrome.config.js
     postChrome: du -hs ./addon-chrome/content/*
 
+  # pwa
+  cleanPwa: rimraf pwa/public/content/* && mkdirp pwa/public/content
+
+  copyTestImagesPwa: cpx "node_modules/tippy-top-sites/images/**/*" pwa/public/content/favicons/images
+
+  copyTopSitesJsonPwa: cpx "node_modules/tippy-top-sites/top_sites.json" pwa/public/content/favicons
+
+  pwa:
+    pre: npm run cleanPwa && npm run copyTestImagesPwa && npm run copyTopSitesJsonPwa
+    bundlePwa: cpx "content-src/static/**/*" pwa/public/content && node-sass content-src/main.scss -o pwa/public/content && node ./pwa/bin/generate-pwa-html.js > pwa/public/content/index.html && webpack --config webpack.pwa.config.js && cp ./pwa/service-worker.js ./pwa/public/content/ && cp ./pwa/manifest.json ./pwa/public/content/
+    postPwa: du -hs ./pwa/public/content/*
+
   analyze: rimraf report && mkdirp report && plato -r -d report -l .jshintrc -t "Activity Stream Chrome Extension" -x "addon-chrome/content|addon-chrome/bin" addon-chrome

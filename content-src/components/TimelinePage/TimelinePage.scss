@@ -17,10 +17,24 @@ main.timeline {
     height: 100%;
     width: $header-nav-width;
 
+    @media screen and (max-width: 480px) {
+      flex-shrink: 1;
+      height: 50px;
+      width: 100%;
+      z-index: 999;
+    }
+
     ul {
       list-style: none;
       margin: 0;
       padding: 0;
+
+      li {
+        @media screen and (max-width: 480px) {
+          float: left;
+          width: 50%;
+        }
+      }
     }
 
     a {
@@ -53,6 +67,11 @@ main.timeline {
     background: $bg-grey;
     margin-bottom: 0;
     margin-left: $header-nav-width;
+
+    @media screen and (max-width: 480px) {
+      margin-top: 50px;
+      margin-left: 0;
+    }
 
     .infinite-scroll {
       margin-top: $base-gutter / 2;

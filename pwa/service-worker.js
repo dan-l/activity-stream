@@ -5,7 +5,8 @@ const filesToCache = [
   "/index.html",
   "/bundle.js",
   "/main.css",
-  "/vendor.bundle.js"
+  "/vendor.bundle.js",
+  "manifest.json"
 ];
 
 self.addEventListener("install", function(e) {

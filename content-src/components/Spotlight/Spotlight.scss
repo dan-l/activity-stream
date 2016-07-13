@@ -8,6 +8,10 @@
     list-style: none;
     margin: 0;
     padding: 0;
+
+    @media screen and (max-width: 480px) {
+      display: block;
+    }
   }
 }
 
@@ -23,6 +27,11 @@
   position: relative;
   @media (min-width: $break-point) {
     flex-shrink: 0;
+  }
+
+  @media screen and (max-width: 480px) {
+    width: auto;
+    margin-bottom: 10px;
   }
 
   .inner-border {
