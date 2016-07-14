@@ -1,5 +1,6 @@
 const ChromePlacesProvider = require("addon-chrome/ChromePlacesProvider");
 const ChromeSearchProvider = require("addon-chrome/ChromeSearchProvider");
+const ChromePreviewProvider = require("addon-chrome/ChromePreviewProvider");
 const {ADDON_TO_CONTENT} = require("common/event-constants");
 const {SEARCH_HEADER,
 SEARCH_FOR_SOMETHING,
@@ -66,15 +67,15 @@ function recentLinks(action) {
  */
 function highlightsLinks() {
   ChromePlacesProvider.highlightsLinks()
-      .then((highlights) => {
-        dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
-        // avoid holding up the init process
-        // grab preview images asynchronously and dispatch them later
-        ChromePlacesProvider.getHighlightsImg(highlights)
-          .then((higlightsWithImgs) => {
-            dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: higlightsWithImgs});
-          });
-      });
+    .then((highlights) => {
+      dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
+      // avoid holding up the init process
+      // grab preview images asynchronously and dispatch them later
+      ChromePreviewProvider.getLinksMetadata(highlights)
+        .then((highlightsMetadata) => {
+          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlightsMetadata});
+        });
+    });
 }
 
 /**
@@ -186,7 +187,7 @@ function searchUIStrings() {
  * Respond with the newly added history items
  */
 function visitHistory() {
-  ChromePlacesProvider.getHistory().then((histories) => {
+  ChromePlacesProvider.getHistory({isSkipCache: true}).then((histories) => {
     dispatch({
       type: "RECENT_LINKS_RESPONSE",
       data: histories
@@ -202,6 +203,7 @@ function visitHistory() {
  */
 function removeHistory(result) {
   result.urls.forEach((url) => {
+    ChromePlacesProvider.removeHistory(url);
     dispatch({
       type: "NOTIFY_HISTORY_DELETE",
       data: url

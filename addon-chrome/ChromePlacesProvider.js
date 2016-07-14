@@ -1,7 +1,5 @@
 const db = require("addon-chrome/db");
-
-const {BLOCKED_URL, METADATA} = require("addon-chrome/constants");
-const {getMetadata} = require("page-metadata-parser");
+const {BLOCKED_URL, METADATA, HISTORY} = require("addon-chrome/constants");
 
 module.exports = class ChromePlacesProvider {
   /**
@@ -13,7 +11,7 @@ module.exports = class ChromePlacesProvider {
    */
   static topFrecentSites() {
     const promise = new Promise((resolve, reject) => {
-      this.getHistory().then((histories) => {
+      this.getHistory({}, true).then((histories) => {
         const rows = histories
           .filter((hist) => !/google/.test(hist.url))
           .map((hist) => {
@@ -78,19 +76,14 @@ module.exports = class ChromePlacesProvider {
    */
   static recentLinks(options) {
     const promise = new Promise((resolve, reject) => {
-      let searchOptions;
+      let searchParam;
       if (options && options.beforeDate) {
-        // Since 1 day might be too small a gap if we didn't browse
-        // but is 1 week the right choice?
-        const aWeek = 7 * 24 * 60 * 60 * 1000;
-        const aWeekAgo = options.beforeDate - aWeek;
-        searchOptions = {
-          startTime: aWeekAgo,
+        searchParam = {
           endTime: options.beforeDate
         };
       }
 
-      this.getHistory(searchOptions).then(resolve);
+      this.getHistory({searchParam}).then(resolve);
     });
 
     return promise;
@@ -106,9 +99,10 @@ module.exports = class ChromePlacesProvider {
   static highlightsLinks() {
     const promise = new Promise((resolve, reject) => {
       const bookmarkPromise = this.getBookmark();
-      const historyPromise = this.getHistory();
       const threeDays = 3 * 24 * 60 * 60 * 1000;
       const today = new Date().getTime();
+      const threeDaysAgo = today - threeDays;
+      const historyPromise = this.getHistory({endTime: threeDaysAgo}, true);
 
       Promise.all([bookmarkPromise, historyPromise]).then((results) => {
         const bookmarks = results[0];
@@ -151,24 +145,37 @@ module.exports = class ChromePlacesProvider {
   }
 
   /**
-   * Query Chrome history api for all the history (need to supply a range to api as default is 24 hours. Chose to be as far back as a year, which seems to be a reasonable time for now) and transform them into activity stream history items
+   * If history is cached, return cached history. Otherwise,
+   * query Chrome history api for history, cache it and transform them into activity stream history items
+   * Default to 100 max results, page if require complete history
    *
-   * @param {Object} options - Search options config
+   * @param {Object} options - Get history options config
+   * @param {Object} options.searchParam - Chrome history api search params
+   * @param {boolean} options.isGetAll - Flag indicating to get all history
+   * @param {boolean} options.isSkipCache - Flag indicating to query straight from api
    * @returns {Object} Promise that resolves with histories
    */
-  static getHistory(options) {
+  static getHistory(options, isGetAll) {
     const today = new Date().getTime();
     const aYear = 365 * 24 * 60 * 60 * 1000;
     const aYearAgo = today - aYear;
     const defaultOption = {
       text: "",
       startTime: aYearAgo,
-      endTime: today,
-      maxResults: 1000000
+      endTime: today
     };
-    const searchOptions = options ? Object.assign(defaultOption, options) : defaultOption;
+    const searchOptions = options ? Object.assign(defaultOption, options.searchParam) : defaultOption;
     const startTime = searchOptions.startTime;
     const endTime = searchOptions.endTime;
+    if (this._isHistoryCached() && !options.isSkipCache) {
+      if (isGetAll) {
+        return db.getAll(HISTORY);
+      }
+      return db.getSlice(HISTORY, {
+        direction: "PREV",
+        compareFn: (slice) => { return slice.lastVisitTime > startTime && slice.lastVisitTime < endTime;}
+      });
+    }
     const promise = new Promise((resolve, reject) => {
       chrome.history.search(searchOptions, (results) => {
         if (startTime && endTime) {
@@ -176,16 +183,81 @@ module.exports = class ChromePlacesProvider {
           // so filter it for now or we could just use this ???
           results = results.filter((result) => result.lastVisitTime > startTime && result.lastVisitTime < endTime);
         }
+
         this.getBookmark()
           .then((bookmarks) => {
             const transformPromises = results.map((result) => this.transformHistory(result, bookmarks));
             Promise.all(transformPromises)
-             .then((histories) => this._filterBlockedUrls(histories).then(resolve));
+             .then((histories) => {
+               this._cacheHistory(histories, searchOptions);
+               this._filterBlockedUrls(histories).then(resolve);
+             });
           });
       });
     });
 
     return promise;
+  }
+
+  static removeHistory(histurl) {
+    db.remove(HISTORY, histurl);
+  }
+
+  static _initHistoryCache() {
+    window.localStorage.setItem("cache", true);
+  }
+
+  static _isHistoryCacheInit() {
+    return window.localStorage.getItem("cache") !== null;
+  }
+
+  static _isHistoryCached(time) {
+    return window.localStorage.getItem("init") !== null;
+  }
+
+  static _cacheHistory(histories, searchOptions) {
+    if (this._isHistoryCacheInit()) {
+      // already started caching history, one copy is enough !
+      return;
+    } else {
+      this._initHistoryCache();
+    }
+    window.localStorage.setItem("init", true);
+    histories.forEach((hist) => db.addOrUpdateExisting(HISTORY, hist));
+    this._pageHistory(histories, searchOptions);
+  }
+
+  static _pageHistory(histories, searchOptions) {
+    if (histories.length > 0) {
+      const lastHistoryItem = histories[histories.length - 1];
+      Object.assign(searchOptions, {endTime: lastHistoryItem.lastVisitTime});
+    } else {
+      Object.assign(searchOptions, {endTime: searchOptions.endTime - 24 * 60 * 60 * 1000});
+    }
+
+    const startTime = searchOptions.startTime;
+    const endTime = searchOptions.endTime;
+    if (startTime > endTime) {
+      // move too far back stop!
+      return;
+    }
+    chrome.history.search(searchOptions, (results) => {
+      if (startTime && endTime) {
+        // api uses start and end time as OR instead of AND
+        // so filter it for now or we could just use this ???
+        results = results.filter((result) => result.lastVisitTime > startTime && result.lastVisitTime < endTime);
+      }
+
+      this.getBookmark()
+        .then((bookmarks) => {
+          const transformPromises = results.map((result) => this.transformHistory(result, bookmarks));
+          Promise.all(transformPromises)
+           .then((histories) => {
+             histories.forEach((hist) => db.addOrUpdateExisting(HISTORY, hist));
+             this._pageHistory(histories, searchOptions);
+           });
+        });
+    });
   }
 
   /**
@@ -223,63 +295,6 @@ module.exports = class ChromePlacesProvider {
    */
   static unblockAllUrl() {
     return db.removeAll(BLOCKED_URL);
-  }
-
-  /**
-   * Fetches images and description for a list of sites
-   *
-   * @param {Array} sites - List of sites to get highlight images for
-   * @returns {Object} Promise that resolves with list of sites and their highlight images
-   */
-  static getHighlightsImg(sites) {
-    const imageWidth = 450;
-    const imageHeight = 278;
-
-    const highlightImgPromise = new Promise((resolve, reject) => {
-      const imgPromises = sites.map((site) => {
-        if (site.images) {
-          return site;
-        }
-
-        return fetch(site.url)
-          .then((r) => r.text())
-          .catch((ex) => imgPromises.push(site)) // can't preview sites like localhost
-          .then((r) => {
-            const pageMetadata = getMetadata(new DOMParser().parseFromString(r, "text/html"));
-
-            const imageUrl = pageMetadata.image_url;
-            const description = pageMetadata.description;
-            const images = [];
-
-            if (imageUrl) {
-              images.push({
-                url: imageUrl,
-                width: imageWidth,
-                height: imageHeight
-              });
-            }
-
-            return Object.assign(site, {images, description});
-          });
-      });
-
-      Promise.all(imgPromises).then((highlights) => {
-        highlights.forEach((highlight) => {
-          if (!highlight) {
-            return;
-          }
-          const metadata = {
-            url: highlight.url,
-            images: highlight.images,
-            description: highlight.description
-          };
-          db.addOrUpdateExisting(METADATA, metadata);
-        });
-        resolve(highlights);
-      });
-    });
-
-    return highlightImgPromise;
   }
 
   /**

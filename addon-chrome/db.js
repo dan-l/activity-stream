@@ -1,4 +1,4 @@
-const {BLOCKED_URL, METADATA, URL} = require("addon-chrome/constants");
+const {BLOCKED_URL, METADATA, URL, HISTORY, LAST_VISIT_TIME} = require("addon-chrome/constants");
 
 const DB_VERSION = 1;
 const DB_NAME = "activitystream";
@@ -51,6 +51,10 @@ module.exports = class Db {
   static _currentSchema() {
     let schema = {};
     schema[1] = {};
+    schema[1][HISTORY] = {
+      keyPath: URL,
+      index: LAST_VISIT_TIME
+    };
     schema[1][BLOCKED_URL] = {
       keyPath: URL
     };
@@ -204,6 +208,37 @@ module.exports = class Db {
           results.push(cursor.value);
           cursor.continue();
         } else {
+          resolve(results);
+        }
+      };
+    });
+
+    return promise;
+  }
+
+  static getSlice(store, opt) {
+    const SLICE_LENGTH = 20;
+    const promise = new Promise((resolve, reject) => {
+      const objectStore = this._getObjectStore(store);
+      const results = [];
+      let cursorReq;
+      const ascending = "NEXT";
+      if (opt && opt.index) {
+        const direction = opt.direction || ascending;
+        cursorReq = objectStore.index(opt.index).openCursor(null, direction);
+      } else {
+        cursorReq = objectStore.openCursor();
+      }
+      cursorReq.onsuccess = function(event) {
+        const cursor = event.target.result;
+        if (results.length === SLICE_LENGTH) {
+          resolve(results);
+        } else if (cursor) {
+          if (opt.compareFn && opt.compareFn(cursor.value)) {
+            results.push(cursor.value);
+          }
+          cursor.continue();
+        }  else {
           resolve(results);
         }
       };
