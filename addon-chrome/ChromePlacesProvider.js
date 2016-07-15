@@ -169,19 +169,25 @@ module.exports = class ChromePlacesProvider {
     const endTime = searchOptions.endTime;
     if (this._isHistoryCached() && !options.isSkipCache) {
       let dbOptions;
+      let dbHistoryFn;
       if (options.isGetAll) {
         dbOptions = {
           index: LAST_VISIT_TIME,
           direction: "prev"
         };
-        return db.getAll(HISTORY, dbOptions);
+        dbHistoryFn = db.getAll;
+      } else {
+        dbOptions = {
+          index: LAST_VISIT_TIME,
+          direction: "prev",
+          compareFn: (slice) => { return slice.lastVisitTime > startTime && slice.lastVisitTime < endTime;}
+        };
+        dbHistoryFn = db.getSlice;
       }
-      dbOptions = {
-        index: LAST_VISIT_TIME,
-        direction: "prev",
-        compareFn: (slice) => { return slice.lastVisitTime > startTime && slice.lastVisitTime < endTime;}
-      };
-      return db.getSlice(HISTORY, dbOptions);
+      return new Promise((resolve, reject) => {
+        dbHistoryFn.call(db, HISTORY, dbOptions)
+          .then((histories) => this._filterBlockedUrls(histories).then(resolve));
+      });
     }
     const promise = new Promise((resolve, reject) => {
       chrome.history.search(searchOptions, (results) => {
@@ -208,6 +214,7 @@ module.exports = class ChromePlacesProvider {
 
   static removeHistory(histurl) {
     db.remove(HISTORY, histurl);
+    db.remove(METADATA, histurl);
   }
 
   static _initHistoryCache() {
@@ -223,6 +230,7 @@ module.exports = class ChromePlacesProvider {
   }
 
   static _cacheHistory(histories, searchOptions) {
+    histories.forEach((hist) => db.addOrUpdateExisting(HISTORY, hist));
     if (this._isHistoryCacheInit()) {
       // already started caching history, one copy is enough !
       return;
@@ -230,7 +238,6 @@ module.exports = class ChromePlacesProvider {
       this._initHistoryCache();
     }
     window.localStorage.setItem("init", true);
-    histories.forEach((hist) => db.addOrUpdateExisting(HISTORY, hist));
     this._pageHistory(histories, searchOptions);
   }
 
@@ -277,7 +284,8 @@ module.exports = class ChromePlacesProvider {
   static _filterBlockedUrls(items) {
     const promise = new Promise((resolve, reject) => {
       db.getAll(BLOCKED_URL)
-        .then((blockedUrls) => {
+        .then((blocked) => {
+          const blockedUrls = blocked.map((block) => block.url);
           const nonBlockedUrls = items.filter((item) => blockedUrls.indexOf(item.url) === -1);
           resolve(nonBlockedUrls);
         });

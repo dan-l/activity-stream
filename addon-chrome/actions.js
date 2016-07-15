@@ -137,6 +137,12 @@ function historyDelete(action) {
  */
 function bookmarkAdd(action) {
   chrome.bookmarks.create({url: action.data});
+  ChromePlacesProvider.recentBookmarks(action.data)
+    .then((data) =>  dispatch({
+      type: "RECENT_BOOKMARKS_RESPONSE",
+      data: data.splice(0, 1),
+      meta: {append: true}
+    }));
 }
 
 /**
