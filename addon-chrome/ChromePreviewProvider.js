@@ -16,7 +16,7 @@ module.exports = class ChromePreviewProvider {
           return site;
         }
 
-        return rateLimit(() => this._getMetadata(site));
+        return this._getMetadata(site);
       });
 
       Promise.all(metadataHighlights).then((highlights) => {
@@ -31,6 +31,7 @@ module.exports = class ChromePreviewProvider {
           };
           db.addOrUpdateExisting(METADATA, metadata);
         });
+        highlights = highlights.filter((highlight) => !!highlight.images && !!highlight.description);
         resolve(highlights);
       });
     });
@@ -39,17 +40,36 @@ module.exports = class ChromePreviewProvider {
   }
 
   /**
+   * Get metadata about a site
+   */
+  static _getMetadata(site) {
+    return new Promise((resolve, reject) => {
+      db.getItem(METADATA, {url: site.url})
+        .then((metadata) => {
+          if (metadata && metadata.images !== undefined) {
+            console.log("hit preview cache");
+            Object.assign(site, metadata);
+            resolve(site);
+          } else {
+            rateLimit(() => this._fetchMetadata(site))
+              .then(resolve);
+          }
+        });
+    });
+  }
+
+  /**
    * Fetch metadata about a site
    * @param {Object} site
    *
    * @returns {Object} site with metadata
    **/
-  static _getMetadata(site)  {
+  static _fetchMetadata(site)  {
     const imageWidth = 450;
     const imageHeight = 278;
 
     const promise = new Promise((resolve, reject) => {
-      return fetch(site.url)
+      fetch(site.url)
         .then((response) => response.text())
         .catch((ex) => resolve(site)) // can"t preview sites like localhost
         .then((domString) => {
@@ -58,9 +78,9 @@ module.exports = class ChromePreviewProvider {
           const imageUrl = pageMetadata.image_url;
           const description = pageMetadata.description;
           const iconUrl = pageMetadata.icon_url;
+          const images = [];
 
           if (imageUrl) {
-            const images = [];
             images.push({
               url: imageUrl,
               width: imageWidth,
@@ -86,9 +106,10 @@ module.exports = class ChromePreviewProvider {
 };
 
 /**
- * Rate limit to fire once every 250ms by default
+ * Rate limit to fire once every 100ms by default
+ * http://jsfiddle.net/dandv/47cbj/
  */
-function rateLimit(fn, delay = 250, context) {
+function rateLimit(fn, delay = 100, context) {
   let queue = [];
   let timer = null;
 

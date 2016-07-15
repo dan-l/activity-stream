@@ -69,7 +69,7 @@ module.exports = class ChromeSearchProvider {
     const suggestionLength = 6;
 
     const suggestionsPromise = new Promise((resolve, reject) => {
-      ChromePlacesProvider.getHistory()
+      ChromePlacesProvider.getHistory({isGetAll: true})
         .then((histories) => {
           const titles = histories.map((hist) => hist.title);
           let formHistory = histories

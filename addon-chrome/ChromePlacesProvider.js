@@ -1,5 +1,5 @@
 const db = require("addon-chrome/db");
-const {BLOCKED_URL, METADATA, HISTORY} = require("addon-chrome/constants");
+const {BLOCKED_URL, METADATA, HISTORY, LAST_VISIT_TIME} = require("addon-chrome/constants");
 
 module.exports = class ChromePlacesProvider {
   /**
@@ -11,9 +11,9 @@ module.exports = class ChromePlacesProvider {
    */
   static topFrecentSites() {
     const promise = new Promise((resolve, reject) => {
-      this.getHistory({}, true).then((histories) => {
+      this.getHistory({isSkipCache: true}).then((histories) => {
         const rows = histories
-          .filter((hist) => !/google/.test(hist.url))
+          .filter((hist) => !/(google|localhost)/.test(hist.url))
           .map((hist) => {
             const microsecondsPerDay = 86400000000;
             const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
@@ -102,17 +102,17 @@ module.exports = class ChromePlacesProvider {
       const threeDays = 3 * 24 * 60 * 60 * 1000;
       const today = new Date().getTime();
       const threeDaysAgo = today - threeDays;
-      const historyPromise = this.getHistory({endTime: threeDaysAgo}, true);
+      const historyPromise = this.getHistory({endTime: threeDaysAgo, isGetAll: true});
 
       Promise.all([bookmarkPromise, historyPromise]).then((results) => {
         const bookmarks = results[0];
-        const histories = results[1];
+        const histories = results[1].filter((hist) => !/(google|localhost)/.test(hist.url));
 
         const rows = bookmarks.concat(histories)
           .filter((r, index) => {
             const isThreeDaysOrOlder = (today - (r.lastVisitDate || r.dateAdded)) > threeDays;
             const isVisitCountAtMostThree = (r.visitCount || 0) <= 3;
-            return !/google/.test(r.url) && isThreeDaysOrOlder && isVisitCountAtMostThree;
+            return isThreeDaysOrOlder && isVisitCountAtMostThree;
           });
 
         resolve(rows);
@@ -155,7 +155,7 @@ module.exports = class ChromePlacesProvider {
    * @param {boolean} options.isSkipCache - Flag indicating to query straight from api
    * @returns {Object} Promise that resolves with histories
    */
-  static getHistory(options, isGetAll) {
+  static getHistory(options) {
     const today = new Date().getTime();
     const aYear = 365 * 24 * 60 * 60 * 1000;
     const aYearAgo = today - aYear;
@@ -168,13 +168,20 @@ module.exports = class ChromePlacesProvider {
     const startTime = searchOptions.startTime;
     const endTime = searchOptions.endTime;
     if (this._isHistoryCached() && !options.isSkipCache) {
-      if (isGetAll) {
-        return db.getAll(HISTORY);
+      let dbOptions;
+      if (options.isGetAll) {
+        dbOptions = {
+          index: LAST_VISIT_TIME,
+          direction: "prev"
+        };
+        return db.getAll(HISTORY, dbOptions);
       }
-      return db.getSlice(HISTORY, {
-        direction: "PREV",
+      dbOptions = {
+        index: LAST_VISIT_TIME,
+        direction: "prev",
         compareFn: (slice) => { return slice.lastVisitTime > startTime && slice.lastVisitTime < endTime;}
-      });
+      };
+      return db.getSlice(HISTORY, dbOptions);
     }
     const promise = new Promise((resolve, reject) => {
       chrome.history.search(searchOptions, (results) => {
@@ -239,6 +246,7 @@ module.exports = class ChromePlacesProvider {
     const endTime = searchOptions.endTime;
     if (startTime > endTime) {
       // move too far back stop!
+      console.log("stop paging!");
       return;
     }
     chrome.history.search(searchOptions, (results) => {

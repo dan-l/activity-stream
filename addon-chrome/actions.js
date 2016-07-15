@@ -68,14 +68,38 @@ function recentLinks(action) {
 function highlightsLinks() {
   ChromePlacesProvider.highlightsLinks()
     .then((highlights) => {
-      dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
+      dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: []});
       // avoid holding up the init process
       // grab preview images asynchronously and dispatch them later
       ChromePreviewProvider.getLinksMetadata(highlights)
         .then((highlightsMetadata) => {
-          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlightsMetadata});
+          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: shuffle(highlightsMetadata)});
         });
     });
+}
+
+/**
+ * Fisher-Yates In-place O(n) shuffle
+ * Pick a random remaining element (from the front) and place in its new location (in the back)
+ * The unshuffled element in the back is swapped to the front, where it waits for subsequent shuffling
+ * https://bost.ocks.org/mike/shuffle/
+ */
+function shuffle(array) {
+  let m = array.length;
+  let t;
+  let i;
+
+  // While there remain elements to shuffle…
+  while (m) {
+    // Pick a remaining element…
+    i = Math.floor(Math.random() * m--);
+    // And swap it with the current element.
+    t = array[m];
+    array[m] = array[i];
+    array[i] = t;
+  }
+
+  return array;
 }
 
 /**
