@@ -11,6 +11,7 @@ module.exports = class ChromePreviewProvider {
    */
   static getLinksMetadata(sites) {
     const highlightImgPromise = new Promise((resolve, reject) => {
+      sites.length = 20;
       const metadataHighlights = sites.map((site) => {
         if (site.images) {
           return site;
@@ -31,7 +32,7 @@ module.exports = class ChromePreviewProvider {
           };
           db.addOrUpdateExisting(METADATA, metadata);
         });
-        highlights = highlights.filter((highlight) => !!highlight.images && !!highlight.description);
+        highlights = highlights.filter((highlight) => highlight && !!highlight.images && !!highlight.description);
         resolve(highlights);
       });
     });

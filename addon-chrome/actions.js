@@ -71,9 +71,9 @@ function highlightsLinks() {
       dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: []});
       // avoid holding up the init process
       // grab preview images asynchronously and dispatch them later
-      ChromePreviewProvider.getLinksMetadata(highlights)
+      ChromePreviewProvider.getLinksMetadata(shuffle(highlights))
         .then((highlightsMetadata) => {
-          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: shuffle(highlightsMetadata)});
+          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlightsMetadata});
         });
     });
 }
