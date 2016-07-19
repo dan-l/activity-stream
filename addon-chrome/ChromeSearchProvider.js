@@ -1,4 +1,8 @@
 const ChromePlacesProvider = require("addon-chrome/ChromePlacesProvider");
+const {SEARCH_HEADER,
+SEARCH_FOR_SOMETHING,
+SEARCH_SETTINGS,
+SEARCH_PLACEHOLDER} = require("addon-chrome/constants");
 
 // https://dxr.mozilla.org/mozilla-esr45/source/browser/locales/en-US/searchplugins
 const engines = [
@@ -32,6 +36,8 @@ const engineUrlMap = {
   Wikipedia: "https://en.wikipedia.org/wiki/Special:Search?search="
 };
 
+const searchPreferencePage = "chrome://settings/searchEngines";
+
 module.exports = class ChromeSearchProvider {
   /**
    * Get the search engines config
@@ -44,6 +50,29 @@ module.exports = class ChromeSearchProvider {
       engines: engines
     };
   }
+
+  /**
+   * Get the search ui strings
+   *
+   * @returns {Object} Config of the ui strings for search interface
+   */
+  static getUiStrings() {
+    return {
+      "searchHeader": SEARCH_HEADER,
+      "searchForSomethingWith": SEARCH_FOR_SOMETHING,
+      "searchSettings": SEARCH_SETTINGS,
+      "searchPlaceholder": SEARCH_PLACEHOLDER
+    };
+  }
+
+  /**
+   * Get the url of the search preference page for Chrome browser
+   *
+   * @returns {string} Url of the search preference page
+   */
+   static getSearchPreferencePage() {
+     return searchPreferencePage;
+   }
 
   /**
    * Get the search url for a given search term and chosen search engine
@@ -68,28 +97,12 @@ module.exports = class ChromeSearchProvider {
   static getSuggestions(searchString) {
     const suggestionLength = 6;
 
-    const suggestionsPromise = new Promise((resolve, reject) => {
-      ChromePlacesProvider.getHistory()
+    return new Promise((resolve) => {
+      ChromePlacesProvider.getHistory({text: searchString})
         .then((histories) => {
-          const titles = histories.map((hist) => hist.title);
-          let formHistory = histories
-            .filter((hist, index) => !!hist.title && (titles.indexOf(hist.title) === index))
-            .map((hist) => {
-              const distance = this._searchDistance(searchString.toLowerCase().trim(), hist);
-              return Object.assign(hist, {distance});
-            })
-						.filter((hist) => hist.distance !== 0)
-            .sort((a, b) => {
-              if (a.distance > b.distance) {
-                return -1;
-              }
-              if (a.distance < b.distance) {
-                return 1;
-              }
-              return 0;
-            })
-						.map((hist) => hist.title)
-						.slice(0, suggestionLength);
+          const formHistory = histories.slice(0, suggestionLength)
+            .filter((hist) => !!hist.title)
+            .map((hist) => hist.title);
 
           resolve({
             suggestions: [searchString],
@@ -98,70 +111,5 @@ module.exports = class ChromeSearchProvider {
           });
         });
     });
-
-    return suggestionsPromise;
-  }
-
-  /**
-   * Calculate the distance between an history item and the search term base on it's url and title
-   *
-   * @param {string} search - Search term
-   * @param {string} hist - History item
-   * @returns {number} The distance
-   */
-  static _searchDistance(search, hist) {
-    const url = hist.url.toLowerCase().replace(/\b(http|https|www|co|ca|com|org)\b/g, "").split(/[^A-Z^a-z^]+/);
-    const title = hist.title.toLowerCase().split(/[^A-Z^a-z]+/);
-    let vec1 = this._dedupe(url.concat(title).filter((w) => !!w));
-    let vec2 = this._dedupe(search.split(" "));
-    const allColumns = this._dedupe(vec1.concat(vec2));
-    const score = this._tanimoto(allColumns, vec1, vec2);
-
-    return score;
-  }
-
-  /**
-   * Distance algorithm that computes a score base on the number of intersected items between 2 vectors
-   *
-   * @param {Array} allColumns - All the items combined from the 2 vectors
-   * @param {Array} v1 - First vector to be compared
-   * @param {Array} v2 - Second vector to be compared
-   * @returns {number} Tanimoto score
-   */
-  static _tanimoto(allColumns, v1, v2) {
-    let c1 = 0;
-    let c2 = 0;
-    let shr = 0;
-    allColumns.forEach((col) => {
-      const index1 = v1.indexOf(col) > -1;
-      const index2 = v2.indexOf(col) > -1;
-      if (index1)	{
-        c1 += 1;
-      }
-      if (index2) {
-        c2 += 1;
-      }
-      if (index1 && index2) {
-        shr += 1;
-      }
-    });
-
-    const combined = (c1 + c2 + shr);
-
-    if (combined === 0) {
-      return 0;
-    }
-
-    return shr / combined;
-  }
-
-  /**
-   * Deduplicate items in an array
-   *
-   * @param {Array} array - Array to be deduplicated
-   * @returns {Array} Array that contains only unique elements
-   */
-  static _dedupe(array) {
-    return array.filter((val, index, array) => array.indexOf(val) === index);
   }
 };

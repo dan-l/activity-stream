@@ -3,7 +3,7 @@ module.exports = {
   METADATA: "metadata",
   URL: "url",
   SEARCH_HEADER: "%S Search",
-  SEARCH_FOR_SOMETHING: "Search for %S with",
+  SEARCH_FOR_SOMETHING: "Search for",
   SEARCH_SETTINGS: "Change Search Settings",
   SEARCH_PLACEHOLDER: "Search the Web"
 };

@@ -1,10 +1,7 @@
 const ChromePlacesProvider = require("addon-chrome/ChromePlacesProvider");
 const ChromeSearchProvider = require("addon-chrome/ChromeSearchProvider");
+const ChromePreviewProvider = require("addon-chrome/ChromePreviewProvider");
 const {ADDON_TO_CONTENT} = require("common/event-constants");
-const {SEARCH_HEADER,
-SEARCH_FOR_SOMETHING,
-SEARCH_SETTINGS,
-SEARCH_PLACEHOLDER} = require("addon-chrome/constants");
 
 /**
  * Respond with top frencent sites
@@ -24,8 +21,9 @@ function topFrecentSites() {
  * @param {number} action.data.beforeDate - Limit results to before this date, represented in milliseconds
  */
 function recentBookmarks(action) {
-  if (action.meta && action.meta.append) {
-    ChromePlacesProvider.recentBookmarks(action.data)
+  if (action && action.meta && action.meta.append) {
+    const beforeDate = action.data.beforeDate;
+    ChromePlacesProvider.recentBookmarks({beforeDate})
       .then((data) =>  dispatch({
         type: "RECENT_BOOKMARKS_RESPONSE",
         data,
@@ -47,8 +45,9 @@ function recentBookmarks(action) {
  * @param {number} action.data.beforeDate - Limit results to before this date, represented in milliseconds
  */
 function recentLinks(action) {
-  if (action.meta && action.meta.append) {
-    ChromePlacesProvider.recentLinks(action.data)
+  if (action && action.meta && action.meta.append) {
+    const endTime = action.data.beforeDate;
+    ChromePlacesProvider.recentLinks({endTime})
       .then((data) =>
         dispatch({
           type: "RECENT_LINKS_RESPONSE",
@@ -66,15 +65,12 @@ function recentLinks(action) {
  */
 function highlightsLinks() {
   ChromePlacesProvider.highlightsLinks()
-      .then((highlights) => {
-        dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: highlights});
-        // avoid holding up the init process
-        // grab preview images asynchronously and dispatch them later
-        ChromePlacesProvider.getHighlightsImg(highlights)
-          .then((higlightsWithImgs) => {
-            dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: higlightsWithImgs});
-          });
-      });
+    .then((highlights) => {
+      ChromePreviewProvider.getLinksMetadata(highlights)
+        .then((higlightsWithImgs) => {
+          dispatch({type: "HIGHLIGHTS_LINKS_RESPONSE", data: higlightsWithImgs});
+        });
+    });
 }
 
 /**
@@ -95,33 +91,111 @@ function unblockAll() {
 }
 
 /**
- * Delete history with specified url from Chrome browser
+ * Respond with the url for each deleted history item from Chrome browser
+ *
+ * @param {Object} action - Result for deleting history request
+ * @param {Array} action.urls - Urls for history items to be deleted
+ */
+function removeHistory(action) {
+  action.urls.forEach((url) => {
+    ChromePlacesProvider.removeMetadata(url);
+    dispatch({
+      type: "NOTIFY_HISTORY_DELETE",
+      data: url
+    });
+  });
+}
+
+/**
+ * Respond with the newly added history items from Chrome browser
+ *
+ * @param {Object} action - Newly added history item
+ * @param {string} action.url - Url fo the newly added history item
+ */
+function visitHistory(action) {
+  const url = action.url;
+  ChromePreviewProvider.cacheMetadata({url});
+  recentLinks();
+}
+
+/**
+ * Respond with the newly created bookmarks from Chrome browser
+ *
+ * @param {Object} action - Result for creating bookmark request
+ * @param {string} action.url - Url for the newly created bookmark
+ */
+function createBookmark(action) {
+  const isFolder = !action.url;
+  if (isFolder) {
+    return;
+  }
+  dispatch({
+    type: "RECENT_BOOKMARKS_RESPONSE",
+    data: [action],
+    meta: {prepend: true}
+  });
+}
+
+/**
+ * Respond with the deleted bookmark id from Chrome browser
+ *
+ * @param {string} action - Id of the bookmark to be deleted
+ */
+function deleteBookmark(action) {
+  dispatch({
+    type: "NOTIFY_BOOKMARK_DELETE",
+    data: action
+  });
+}
+
+/**
+ * Delete history with specified url from content
  *
  * @param {Object} action - Action config
  * @param {string} action.data - The url of the history item to be deleted
  */
 function historyDelete(action) {
-  chrome.history.deleteUrl({url: action.data});
+  const url = action.data;
+  chrome.history.deleteUrl({url});
+  ChromePlacesProvider.removeMetadata(url);
+  dispatch({
+    type: "NOTIFY_HISTORY_DELETE",
+    data: url
+  });
 }
 
 /**
- * Create a new bookmark from Chrome browser
+ * Create a new bookmark from content
  *
  * @param {Object} action - Action config
  * @param {string} action.data - The url of the newly created bookmark
  */
 function bookmarkAdd(action) {
-  chrome.bookmarks.create({url: action.data});
+  const url = action.data.url;
+  const title = action.data.title;
+  chrome.bookmarks.create({url, title});
+  ChromePlacesProvider.recentBookmarks({maxResults: 1})
+    .then((data) =>  dispatch({
+      type: "RECENT_BOOKMARKS_RESPONSE",
+      data,
+      meta: {append: true}
+    }));
 }
 
 /**
- * Delete a bookmark with specified url from Chrome browser
+ * Delete a bookmark with specified url from content
  *
  * @param {Object} action - Action config
  * @param {string} action.data - The url of the bookmark item to be deleted
  */
 function bookmarkDelete(action) {
-  chrome.bookmarks.remove(action.data);
+  const data = action.data;
+  chrome.bookmarks.remove(data);
+  ChromePlacesProvider.removeMetadata(data);
+  dispatch({
+    type: "NOTIFY_BOOKMARK_DELETE",
+    data
+  });
 }
 
 /**
@@ -133,7 +207,9 @@ function bookmarkDelete(action) {
  * @param {boolean} action.data.incognito - Boolean flag indicating whether to open link in a new private window
  */
 function openNewWindow(action) {
-  chrome.windows.create({url: action.data.url, incognito: action.data.isPrivate});
+  const url = action.data.url;
+  const incognito = action.data.isPrivate;
+  chrome.windows.create({url, incognito});
 }
 
 /**
@@ -152,7 +228,8 @@ function searchState() {
  * @param {string} action.data.searchString - Search term
  */
 function searchSuggestions(action) {
-  ChromeSearchProvider.getSuggestions(action.data.searchString)
+  const searchString = action.data.searchString;
+  ChromeSearchProvider.getSuggestions(searchString)
     .then((data) => dispatch({type: "SEARCH_SUGGESTIONS_RESPONSE", data}));
 }
 
@@ -165,78 +242,26 @@ function searchSuggestions(action) {
  * @param {string} action.data.engineName - Name of the chosen search engine
  */
 function performSearch(action) {
-  const searchUrl = ChromeSearchProvider.getSearchUrl(action.data.searchString, action.data.engineName);
-  chrome.tabs.update({url: searchUrl});
+  const searchString = action.data.searchString;
+  const engineName = action.data.engineName;
+  const url = ChromeSearchProvider.getSearchUrl(searchString, engineName);
+  chrome.tabs.update({url});
 }
 
 /**
  * Respond with the ui strings for the search interface
  */
 function searchUIStrings() {
-  const uiStrings = {
-    "searchHeader": SEARCH_HEADER,
-    "searchForSomethingWith": SEARCH_FOR_SOMETHING,
-    "searchSettings": SEARCH_SETTINGS,
-    "searchPlaceholder": SEARCH_PLACEHOLDER
-  };
-  dispatch({type: "SEARCH_UISTRINGS_RESPONSE", data: uiStrings});
+  const data = ChromeSearchProvider.getUiStrings();
+  dispatch({type: "SEARCH_UISTRINGS_RESPONSE", data});
 }
 
 /**
- * Respond with the newly added history items
+ * Opens the search preference page for Chrome browser
  */
-function visitHistory() {
-  ChromePlacesProvider.getHistory().then((histories) => {
-    dispatch({
-      type: "RECENT_LINKS_RESPONSE",
-      data: histories
-    });
-  });
-}
-
-/**
- * Respond with the delete history item's url for each deleted history item
- *
- * @param {Object} result - Result for deleting history request
- * @param {Array} result.urls - Urls for history items to be deleted
- */
-function removeHistory(result) {
-  result.urls.forEach((url) => {
-    dispatch({
-      type: "NOTIFY_HISTORY_DELETE",
-      data: url
-    });
-  });
-}
-
-/**
- * Respond with the newly created bookmarks
- *
- * @param {Object} result - Result for creating bookmark request
- * @param {string} result.url - Url for the newly created bookmark
- */
-function createBookmark(result) {
-  const isFolder = !result.url;
-  if (isFolder) {
-    return;
-  }
-  dispatch({
-    type: "RECENT_BOOKMARKS_RESPONSE",
-    data: [result],
-    meta: {prepend: true}
-  });
-}
-
-/**
- * Respond with the deleted bookmark id
- *
- * @param {string} data - Id of the bookmark to be deleted
- */
-function deleteBookmark(data) {
-  dispatch({
-    type: "NOTIFY_BOOKMARK_DELETE",
-    data
-  });
+function manageSearchEngine() {
+  const url = ChromeSearchProvider.getSearchPreferencePage();
+  chrome.tabs.update({url});
 }
 
 /**
@@ -267,4 +292,5 @@ searchUIStrings,
 visitHistory,
 removeHistory,
 createBookmark,
-deleteBookmark};
+deleteBookmark,
+manageSearchEngine};

@@ -12,7 +12,8 @@ openNewWindow,
 searchSuggestions,
 performSearch,
 searchState,
-searchUIStrings} = require("addon-chrome/actions");
+searchUIStrings,
+manageSearchEngine} = require("addon-chrome/actions");
 
 module.exports = class ChromeActionManager {
   constructor() {
@@ -68,6 +69,9 @@ module.exports = class ChromeActionManager {
           break;
         case "SEARCH_UISTRINGS_REQUEST":
           searchUIStrings();
+          break;
+        case "NOTIFY_MANAGE_ENGINES":
+          manageSearchEngine();
           break;
       }
     });
