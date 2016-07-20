@@ -72,7 +72,7 @@ module.exports = {
       {test: /\.json$/, loader: "json"},
       {
         test: /\.jsx?$/,
-        include: /.\/(pwa|common|content-src|content-test)\//,
+        include: /.\/(pwa|common|content-src|content-test|node_modules\/fancy-dedupe|node_modules\/tippy-top-sites)\//,
         loader: "babel"
       }
     ]
