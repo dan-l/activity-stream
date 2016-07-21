@@ -1,5 +1,7 @@
+const ChromePreviewProvider = require("addon-chrome/ChromePreviewProvider");
 const db = require("addon-chrome/db");
-const {BLOCKED_URL, METADATA} = require("addon-chrome/constants");
+const {BLOCKED_URL, SEARCH_RESULT_REGEX, LOCALHOST_REGEX, BROWSER_RESOURCE_REGEX} = require("addon-chrome/constants");
+const _ = require("lodash/collection");
 
 module.exports = class ChromePlacesProvider {
   /**
@@ -25,7 +27,7 @@ module.exports = class ChromePlacesProvider {
    */
   static recentBookmarks(options) {
     return new Promise((resolve) => {
-      this._getBookmark(options).then((bookmarks) => {
+      this._getBookmarks(options).then((bookmarks) => {
         let rows = bookmarks;
         rows.sort((a, b) => {
           if (a.dateAdded > b.dateAdded) {
@@ -66,12 +68,21 @@ module.exports = class ChromePlacesProvider {
   }
 
   /**
-   * Remove item from metadata cache
+   * Proxy method to ChromePreviewProvider's removeMetadata
    *
    * @param {string} url - Item's url
    */
   static removeMetadata(url) {
-    db.remove(METADATA, url);
+    ChromePreviewProvider.removeMetadata(url);
+  }
+
+  /**
+  * Proxy method to ChromePreviewProvider's cacheMetadata
+  *
+  * @param {Object} site - Site to get metadata for
+  */
+  static cacheMetadata(site) {
+    ChromePreviewProvider.cacheMetadata(site);
   }
 
   /**
@@ -100,7 +111,7 @@ module.exports = class ChromePlacesProvider {
    *
    * @returns {Object} Promise that resolves with bookmarks
    */
-  static _getBookmark(options) {
+  static _getBookmarks(options) {
     return new Promise((resolve) => {
       chrome.bookmarks.getTree((trees) => {
         let rawBookmarks = [];
@@ -143,7 +154,7 @@ module.exports = class ChromePlacesProvider {
           // so filter it for now or we could just use this ???
           results = results.filter((result) => result.lastVisitTime > startTime && result.lastVisitTime < endTime);
         }
-        this._getBookmark()
+        this._getBookmarks()
           .then((bookmarks) => {
             const histories = results.map((result) => this._transformHistory(result, bookmarks));
             this._filterBlockedUrls(histories).then(resolve);
@@ -161,8 +172,13 @@ module.exports = class ChromePlacesProvider {
    */
   static _getTopFrecentSites(histories) {
     return new Promise((resolve) => {
+      const searchResultRegex = new RegExp(SEARCH_RESULT_REGEX);
+      const localhostRegex = new RegExp(LOCALHOST_REGEX);
+      const browserResourceRegex = new RegExp(BROWSER_RESOURCE_REGEX);
+      const filterRegex = new RegExp(searchResultRegex.source + "|" + localhostRegex.source + "|" + browserResourceRegex.source);
+
       const rows = histories
-        .filter((hist) => !/(google|localhost)/.test(hist.url))
+        .filter((hist) => !filterRegex.test(hist.url))
         .map((hist) => {
           const frencency = this._calculateFrecency(hist);
           return Object.assign(hist, {frencency});
@@ -198,7 +214,9 @@ module.exports = class ChromePlacesProvider {
    */
   static _calculateFrecency(hist) {
     const microsecondsPerDay = 86400000000;
-    const age = (new Date().getTime() - hist.lastVisitDate) / microsecondsPerDay;
+    const microsecondsToday = new Date().getTime() * 1000;
+    const microsecondsLastVisitDate = hist.lastVisitDate * 1000;
+    const age = (microsecondsToday - microsecondsLastVisitDate) / microsecondsPerDay;
     const frencency = hist.visitCount * Math.max(1, 100 * 225 / (age * age + 225));
     return frencency;
   }
@@ -211,18 +229,25 @@ module.exports = class ChromePlacesProvider {
    */
   static _getHighlights() {
     return new Promise((resolve) => {
-      const bookmarkPromise = this._getBookmark();
+      const bookmarkPromise = this._getBookmarks();
       const historyPromise = this.getHistory();
 
       Promise.all([bookmarkPromise, historyPromise]).then((results) => {
-        const bookmarks = results[0].filter((bookmarks) => !/(google|localhost)/.test(bookmarks.url));
-        const histories = results[1].filter((hist) => !/(google|localhost)/.test(hist.url));
+        const searchResultRegex = new RegExp(SEARCH_RESULT_REGEX);
+        const localhostRegex = new RegExp(LOCALHOST_REGEX);
+        const browserResourceRegex = new RegExp(BROWSER_RESOURCE_REGEX);
+        const filterRegex = new RegExp(searchResultRegex.source + "|" + localhostRegex.source + "|" + browserResourceRegex.source);
+
+        const bookmarks = results[0].filter((bookmarks) => !filterRegex.test(bookmarks.url));
+        const histories = results[1].filter((hist) => !filterRegex.test(hist.url));
 
         const rows = bookmarks.concat(histories)
           .filter((item) => this._isHighlightItem(item));
 
-        const shuffledRows = this._shuffle(rows);
-        resolve(shuffledRows);
+        const shuffledRows = _.shuffle(rows);
+
+        ChromePreviewProvider.getLinksMetadataForHighlights(shuffledRows)
+          .then(resolve);
       });
     });
   }
@@ -250,41 +275,12 @@ module.exports = class ChromePlacesProvider {
     }
 
     const isVisitCountAtMostThree = (item.visitCount || 0) <= 3;
-    const isValidLinks = !/(google|localhost)/.test(item.url);
 
-    return isValidLinks && (isThirtyMinutesOrOlder || isThreeDaysOrOlder) && isVisitCountAtMostThree;
+    return (isThirtyMinutesOrOlder || isThreeDaysOrOlder) && isVisitCountAtMostThree;
   }
 
   /**
-   * Fisher-Yates In-place O(n) shuffle
-   * Pick a random remaining element (from the front) and place in its new location (in the back)
-   * The unshuffled element in the back is swapped to the front, where it waits for subsequent shuffling
-   * https://bost.ocks.org/mike/shuffle/
-   *
-   * @param {Array} array - The array of items to shuffle
-   *
-   * @returns {Array} The shuffled array
-   */
-  static _shuffle(array) {
-    let arrayLen = array.length;
-    let temp;
-    let index;
-
-    // While there remain elements to shuffle…
-    while (arrayLen) {
-      // Pick a remaining element…
-      index = Math.floor(Math.random() * arrayLen--);
-      // And swap it with the current element.
-      temp = array[arrayLen];
-      array[arrayLen] = array[index];
-      array[index] = temp;
-    }
-
-    return array;
-  }
-
-  /**
-   * Filters out the blocked urls from a list of item
+   * Filters out the blocked urls from a list of items
    *
    * @param {Array} items - List of items that needs to be filtered
    * @returns {Object} Promise that resolves with a list of urls that are not in the blocked list
@@ -302,7 +298,7 @@ module.exports = class ChromePlacesProvider {
 
   /**
    * Transform a raw history bookmark item into activity stream's history item,
-   * merge the history item with the bookmark item that shares it's url if it hasn't and merge it's metadata
+   * merge the history item with the bookmark item that shares its url if it hasn't and merge its metadata
    *
    * @param {Object} hist - History item to be transformed
    * @param {Object} bookmarks - List of bookmarks
@@ -318,7 +314,7 @@ module.exports = class ChromePlacesProvider {
   }
 
   /**
-   * Transform a raw chrome bookmark item into activity stream's bookmark item and merge it's metadata
+   * Transform a raw chrome bookmark item into activity stream's bookmark item and merge its metadata
    *
    * @param {Object} bookmark - Bookmark to be transformed
    * @returns {Object} Promise that resolves with the bookmark has been transformed
@@ -368,7 +364,7 @@ module.exports = class ChromePlacesProvider {
    * @param {Array} bookmarks - List of bookmarks
    * @returns {Object} The merged history and bookmark item if they share the same url
    */
-	static _mergeHistoryBookmark(hist, bookmarks) {
+  static _mergeHistoryBookmark(hist, bookmarks) {
     const bookmarkUrls = bookmarks.map((bookmark) => bookmark.url);
     const index = bookmarkUrls.indexOf(hist.url);
     if (index > -1) {

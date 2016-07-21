@@ -1,4 +1,4 @@
-const {visitHistory, removeHistory, createBookmark, deleteBookmark}  = require("addon-chrome/actions");
+const {visitHistory, removeHistory, createBookmark, deleteBookmark}  = require("addon-chrome/ChromePlacesAction");
 
 module.exports = class ChromeListenerManager {
   constructor() {

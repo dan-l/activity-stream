@@ -69,6 +69,11 @@ module.exports = class Db {
   static _version1(resolve) {
     const keyStores = this._currentSchema();
     const stores = [];
+    const done = function(event) {
+      if (stores.length === keyStores.length) {
+        resolve();
+      }
+    };
     for (const store in keyStores) {
       const keyPath = keyStores[store].keyPath;
       stores.push(store);
@@ -77,11 +82,7 @@ module.exports = class Db {
       if (index !== undefined) {
         objectStore.createIndex(index, index, {unique: true});
       }
-      objectStore.transaction.oncomplete = function(event) {
-        if (stores.length === keyStores.length) {
-          resolve();
-        }
-      };
+      objectStore.transaction.oncomplete = done;
     }
   }
 

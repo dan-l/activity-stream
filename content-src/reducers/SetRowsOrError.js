@@ -23,6 +23,7 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
           state.error = action.data;
         } else {
           state.init = true;
+          // Flag that indicates whether to prepend or append to new results to existing state (which is an array)
           state.rows = meta.prepend ? action.data.concat(prevState.rows) :
             meta.append ? prevState.rows.concat(action.data) : action.data;
           state.error = false;

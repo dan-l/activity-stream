@@ -8,12 +8,12 @@ bookmarkAdd,
 bookmarkDelete,
 blockUrl,
 unblockAll,
-openNewWindow,
-searchSuggestions,
+openNewWindow} = require("addon-chrome/ChromePlacesAction");
+const {searchSuggestions,
 performSearch,
 searchState,
 searchUIStrings,
-manageSearchEngine} = require("addon-chrome/actions");
+manageSearchEngine} = require("addon-chrome/ChromeSearchAction");
 
 module.exports = class ChromeActionManager {
   constructor() {
