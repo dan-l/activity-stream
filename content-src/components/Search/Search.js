@@ -60,6 +60,7 @@ const Search = React.createClass({
     let searchData = {
       engineName: options.engineName,
       searchString: options.searchString,
+      formHistoryUrl: options.formHistoryUrl,
       searchPurpose: "d"
     };
     this.props.dispatch(actions.NotifyPerformSearch(searchData));
@@ -97,7 +98,7 @@ const Search = React.createClass({
           if (index < numSuggestions - 1) {
             // We are in suggestions, move down until the last one.
             newSuggestionIndex++;
-            this.props.dispatch(actions.NotifyUpdateSearchString(suggestions[newSuggestionIndex]));
+            this.props.dispatch(actions.NotifyUpdateSearchString(suggestions[newSuggestionIndex].title));
           } else if (index === numSuggestions - 1) {
             // We are on the last suggestion, reset suggestion index and
             // start on the engine index.
@@ -136,13 +137,13 @@ const Search = React.createClass({
           if (index < numSuggestions) {
             // We are in suggestions, move on up.
             newSuggestionIndex--;
-            this.props.dispatch(actions.NotifyUpdateSearchString(suggestions[newSuggestionIndex]));
+            this.props.dispatch(actions.NotifyUpdateSearchString(suggestions[newSuggestionIndex].title));
           } else if (index === numSuggestions) {
             // We are on the first engine, reset engine index and move to
             // last suggestion.
             newEngineIndex = -1;
             newSuggestionIndex = numSuggestions - 1;
-            this.props.dispatch(actions.NotifyUpdateSearchString(suggestions[newSuggestionIndex]));
+            this.props.dispatch(actions.NotifyUpdateSearchString(suggestions[newSuggestionIndex].title));
           } else if (index < numSuggestions + numEngines) {
             // We are on the engine list, move on up.
             newEngineIndex--;
@@ -201,7 +202,7 @@ const Search = React.createClass({
         // This is the case where the user deletes a form history entry from the dropdown
         // You can only delete form history entries, so check that the active suggestion is
         // a form history entry.
-        if (this.props.formHistory.includes(suggestions[newSuggestionIndex])) {
+        if (this.props.formHistory.includes(suggestions[newSuggestionIndex].title)) {
           // Remove it, update your form history list and your list of suggestions.
           this.removeFormHistory(suggestions[newSuggestionIndex]);
           this.props.formHistory.splice(newSuggestionIndex, 1);
@@ -226,7 +227,8 @@ const Search = React.createClass({
         }
         this.performSearch({
           engineName: this.getActiveEngine(),
-          searchString: this.getActiveSuggestion() || this.props.searchString
+          searchString: this.getActiveSuggestion().title || this.props.searchString,
+          formHistoryUrl: this.getActiveSuggestion().url
         });
         return;
       default:
@@ -278,12 +280,12 @@ const Search = React.createClass({
             const active = (this.state.activeSuggestionIndex === suggestionsIdIndex);
             const activeEngine = this.getActiveEngine();
             const suggestionIndex = suggestionsIdIndex++;
-            return (<li key={suggestion} role="option">
+            return (<li key={suggestion.title + suggestionIndex} role="option">
                   <a id={"history-search-suggestions-" + suggestionIndex }
                      onMouseMove={() => this.onMouseMove(suggestionIndex)}
                      className={active ? "active" : ""} role="option"
-                     aria-selected={active} onClick={() => this.performSearch({engineName: activeEngine, searchString: suggestion})}>
-                     <div id="historyIcon" className={active ? "active" : ""}></div>{suggestion}</a>
+                     aria-selected={active} onClick={() => this.performSearch({engineName: activeEngine, formHistoryUrl: suggestion.url})}>
+                     <div id="historyIcon" className={active ? "active" : ""}></div>{suggestion.title} -- <b>{suggestion.url}</b></a>
                 </li>);
           })}
         </ul>
@@ -294,12 +296,12 @@ const Search = React.createClass({
             const active = (this.state.activeSuggestionIndex === suggestionsIdIndex);
             const activeEngine = this.getActiveEngine();
             const suggestionIndex = suggestionsIdIndex++;
-            return (<li key={suggestion} role="option">
-            <a ref={suggestion} id={"search-suggestions-" + suggestionIndex }
+            return (<li key={suggestion.title} role="option">
+            <a ref={suggestion.title} id={"search-suggestions-" + suggestionIndex }
               onMouseMove={() => this.onMouseMove(suggestionIndex)}
               className={active ? "active" : ""} role="option"
               aria-selected={active}
-              onClick={() => this.performSearch({engineName: activeEngine, searchString: suggestion})}>{suggestion}</a>
+              onClick={() => this.performSearch({engineName: activeEngine, searchString: suggestion.title})}>{suggestion.title}</a>
             </li>);
           })}
         </ul>

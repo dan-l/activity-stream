@@ -27,13 +27,20 @@ function searchSuggestions(action) {
  *
  * @param {Object} action - Action config
  * @param {Object} action.data - Data config
- * @param {string} action.data.searchString - Search term
+ * @param {string} action.data.formHistoryUrl - Url of the form history item
+ * @param {string} action.data.searchString - Search term if it's a search suggestion
  * @param {string} action.data.engineName - Name of the chosen search engine
  */
 function performSearch(action) {
+  const formHistoryUrl = action.data.formHistoryUrl;
   const searchString = action.data.searchString;
   const engineName = action.data.engineName;
-  const url = ChromeSearchProvider.getSearchUrl(searchString, engineName);
+  let url;
+  if (formHistoryUrl) {
+    url =  formHistoryUrl;
+  } else {
+    url = ChromeSearchProvider.getSearchUrl(searchString, engineName);
+  }
   chrome.tabs.update({url});
 }
 

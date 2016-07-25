@@ -92,24 +92,45 @@ module.exports = class ChromeSearchProvider {
    * Get suggestions for a given search term using browsing history items
    *
    * @param {string} searchString - Search term
-   * @returns {Object} Suggesions and history related to the given search term
+   * @returns {Object} Promise that will resolve with suggestions and history related to the given search term
    */
   static getSuggestions(searchString) {
-    const suggestionLength = 6;
-
+    const suggestions = {
+      suggestions: [{title: searchString}],
+      formHistory: [],
+      searchString
+    };
     return new Promise((resolve) => {
-      ChromePlacesProvider.getHistory({text: searchString})
-        .then((histories) => {
-          const formHistory = histories.slice(0, suggestionLength)
-            .filter((hist) => !!hist.title)
-            .map((hist) => hist.title);
-
-          resolve({
-            suggestions: [searchString],
-            formHistory,
-            searchString
-          });
-        });
+      if (!searchString) {
+        resolve(suggestions);
+      } else {
+        this._getFormHistory(searchString, suggestions, resolve);
+      }
     });
+  }
+
+  /**
+   * Get history items related to search term
+   *
+   * @param {string} searchString - Search term
+   * @param {Object} suggestions - List of suggestion items
+   * @param {Function} callback - Callback function
+   *
+   * @returns {Object} A list of form history matching searchString
+   **/
+  static _getFormHistory(searchString, suggestions, callback) {
+    ChromePlacesProvider.getHistory({text: searchString})
+      .then((histories) => {
+        const formHistory = histories
+          .filter((hist) => !!hist.title)
+          .map((hist) => {
+            return {
+              title: hist.title,
+              url: hist.url
+            };
+          });
+
+        callback(Object.assign(suggestions, {formHistory}));
+      });
   }
 };
