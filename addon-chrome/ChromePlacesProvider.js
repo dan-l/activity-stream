@@ -107,16 +107,30 @@ module.exports = class ChromePlacesProvider {
   /**
    * Query Chrome bookmark api for a list of bookmar items with specified config
    *
-   * @param {Object} options - Config object for @{link _collectBookmarks}
+   * @param {Object} options - Config object
+   * @param {Number} options.beforeDate - Only get bookmarks before this date, represented in milliseconds. Defaults to today
+   * @param {Number} options.maxResult - Limit to return the number of bookmarks. Defaults to 20.
    *
    * @returns {Object} Promise that resolves with bookmarks
    */
-  static _getBookmarks(options) {
+  static _getBookmarks({beforeDate = new Date().getTime(), maxResults = 20} = {}) {
     return new Promise((resolve) => {
       chrome.bookmarks.getTree((trees) => {
         let rawBookmarks = [];
-        this._collectBookmarks(trees, rawBookmarks, options);
-        const bookmarks = rawBookmarks.map(this._transformBookmark);
+        this._collectBookmarks(trees, rawBookmarks);
+        const bookmarks = rawBookmarks
+          .sort((a, b) => {
+            if (a.dateAdded > b.dateAdded) {
+              return -1;
+            }
+            if (a.dateAdded < b.dateAdded) {
+              return 1;
+            }
+            return 0;
+          })
+          .filter((bookmark) => bookmark.dateAdded < beforeDate)
+          .slice(0, maxResults)
+          .map(this._transformBookmark);
         this._filterBlockedUrls(bookmarks).then(resolve);
       });
     });
@@ -333,26 +347,17 @@ module.exports = class ChromePlacesProvider {
    *
    * @param {Array} trees - Root of a Chrome bookmark tree item
    * @param {Array} bookmarks - List of bookmarks accumulated by traversing the tree
-   * @param {Object} options - Config object
-   * @param {Number} options.beforeDate - Only get bookmarks before this date, represented in milliseconds. Default to today
-   * @param {Number} options.maxResult - Limit to return the number of bookmarks. Default to 20.
    */
-  static _collectBookmarks(trees, bookmarks, {beforeDate = new Date().getTime(), maxResults = 20} = {}) {
+  static _collectBookmarks(trees, bookmarks) {
     trees.forEach((tree) => {
-      const hasExceededMaxResults = bookmarks.length >= maxResults;
-      if (hasExceededMaxResults) {
-        return;
-      }
-
       const isBookmarkLink = !!tree.url;
-      const isAddedBeforeDate = tree.dateAdded < beforeDate;
-      if (isBookmarkLink && isAddedBeforeDate) {
+      if (isBookmarkLink) {
         bookmarks.push(tree);
       }
 
       const hasMoreBookmarks = !!tree.children;
       if (hasMoreBookmarks) {
-        this._collectBookmarks(tree.children, bookmarks, {beforeDate, maxResults});
+        this._collectBookmarks(tree.children, bookmarks);
       }
     });
   }
