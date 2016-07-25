@@ -2,6 +2,7 @@ const ChromePreviewProvider = require("addon-chrome/ChromePreviewProvider");
 const db = require("addon-chrome/db");
 const {BLOCKED_URL, SEARCH_RESULT_REGEX, LOCALHOST_REGEX, BROWSER_RESOURCE_REGEX} = require("addon-chrome/constants");
 const _ = require("lodash/collection");
+const urlParse = require("url-parse");
 
 module.exports = class ChromePlacesProvider {
   /**
@@ -191,7 +192,19 @@ module.exports = class ChromePlacesProvider {
       const browserResourceRegex = new RegExp(BROWSER_RESOURCE_REGEX);
       const filterRegex = new RegExp(searchResultRegex.source + "|" + localhostRegex.source + "|" + browserResourceRegex.source);
 
-      const rows = histories
+      // Consolidate so that entries with similar hostname only show up as one entry
+      const hostMap = {};
+      const filteredHistories = [];
+      histories.forEach((hist) => {
+        const parsedUrl = urlParse(hist.url);
+        const isExist = hostMap[parsedUrl.host];
+        if (!isExist) {
+          filteredHistories.push(hist);
+          hostMap[parsedUrl.host] = true;
+        }
+      });
+
+      const rows = filteredHistories
         .filter((hist) => !filterRegex.test(hist.url))
         .map((hist) => {
           const frencency = this._calculateFrecency(hist);
