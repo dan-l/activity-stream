@@ -316,7 +316,7 @@ const Search = React.createClass({
               const active = (this.state.activeEngineIndex === enginesIdIndex);
               return (<li key={option.name} className={active ? "active" : ""}>
                 <a ref={option.name} id={"search-partners-" + enginesIdIndex++ } aria-selected={active}
-                      onClick={() => this.performSearch({engineName: option.name, searchString: this.getActiveSuggestion() || searchString})}>
+                      onClick={() => this.performSearch({engineName: option.name, searchString: this.getActiveSuggestion().title || searchString})}>
                 <img src={icon} alt={option.name} width="16" height="16"/></a>
               </li>);
             })}
