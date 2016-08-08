@@ -1,6 +1,6 @@
 const ChromePreviewProvider = require("addon-chrome/ChromePreviewProvider");
 const db = require("addon-chrome/db");
-const {BLOCKED_URL, SEARCH_RESULT_REGEX, LOCALHOST_REGEX, BROWSER_RESOURCE_REGEX} = require("addon-chrome/constants");
+const {BLOCKED_URL, SEARCH_RESULT_REGEX, LOCAL_REGEX, BROWSER_RESOURCE_REGEX} = require("addon-chrome/constants");
 const _ = require("lodash/collection");
 const urlParse = require("url-parse");
 
@@ -183,51 +183,49 @@ module.exports = class ChromePlacesProvider {
    *
    * @param {Array} histories - List of history items
    *
-   * @returns {Object} Promise that resolves with list of history items ranked by their frencency, lastVisitTime, url
+   * @returns {Object} List of history items ranked by their frencency, lastVisitTime, url
    */
   static _getTopFrecentSites(histories) {
-    return new Promise((resolve) => {
-      const searchResultRegex = new RegExp(SEARCH_RESULT_REGEX);
-      const localhostRegex = new RegExp(LOCALHOST_REGEX);
-      const browserResourceRegex = new RegExp(BROWSER_RESOURCE_REGEX);
-      const filterRegex = new RegExp(searchResultRegex.source + "|" + localhostRegex.source + "|" + browserResourceRegex.source);
+    const searchResultRegex = new RegExp(SEARCH_RESULT_REGEX);
+    const localhostRegex = new RegExp(LOCAL_REGEX);
+    const browserResourceRegex = new RegExp(BROWSER_RESOURCE_REGEX);
+    const filterRegex = new RegExp(searchResultRegex.source + "|" + localhostRegex.source + "|" + browserResourceRegex.source);
 
-      // Consolidate so that entries with similar hostname only show up as one entry
-      const hostMap = {};
-      const filteredHistories = [];
-      histories.forEach((hist) => {
-        const parsedUrl = urlParse(hist.url);
-        const isExist = hostMap[parsedUrl.host];
-        if (!isExist) {
-          filteredHistories.push(hist);
-          hostMap[parsedUrl.host] = true;
+    // Consolidate so that entries with similar hostname only show up as one entry
+    const hostMap = {};
+    const filteredHistories = [];
+    histories.forEach((hist) => {
+      const parsedUrl = urlParse(hist.url);
+      const isExist = hostMap[parsedUrl.host];
+      if (!isExist) {
+        filteredHistories.push(hist);
+        hostMap[parsedUrl.host] = true;
+      }
+    });
+
+    const rows = filteredHistories
+      .filter((hist) => !filterRegex.test(hist.url))
+      .map((hist) => {
+        const frencency = this._calculateFrecency(hist);
+        return Object.assign(hist, {frencency});
+      })
+      .sort((a, b) => {
+        if (a.frencency > b.frencency) {
+          return -1;
         }
+        if (a.frencency < b.frencency) {
+          return 1;
+        }
+        if (a.lastVisitTime > b.lastVisitTime) {
+          return -1;
+        }
+        if (a.url > b.url) {
+          return -1;
+        }
+        return 0;
       });
 
-      const rows = filteredHistories
-        .filter((hist) => !filterRegex.test(hist.url))
-        .map((hist) => {
-          const frencency = this._calculateFrecency(hist);
-          return Object.assign(hist, {frencency});
-        })
-        .sort((a, b) => {
-          if (a.frencency > b.frencency) {
-            return -1;
-          }
-          if (a.frencency < b.frencency) {
-            return 1;
-          }
-          if (a.lastVisitTime > b.lastVisitTime) {
-            return -1;
-          }
-          if (a.url > b.url) {
-            return -1;
-          }
-          return 0;
-        });
-
-      resolve(rows);
-    });
+    return rows;
   }
 
   /**
@@ -261,7 +259,7 @@ module.exports = class ChromePlacesProvider {
 
       Promise.all([bookmarkPromise, historyPromise]).then((results) => {
         const searchResultRegex = new RegExp(SEARCH_RESULT_REGEX);
-        const localhostRegex = new RegExp(LOCALHOST_REGEX);
+        const localhostRegex = new RegExp(LOCAL_REGEX);
         const browserResourceRegex = new RegExp(BROWSER_RESOURCE_REGEX);
         const filterRegex = new RegExp(searchResultRegex.source + "|" + localhostRegex.source + "|" + browserResourceRegex.source);
 
@@ -334,7 +332,7 @@ module.exports = class ChromePlacesProvider {
   static _transformHistory(hist, bookmarks) {
     const mergedHist = this._mergeHistoryBookmark(hist, bookmarks);
     Object.assign(mergedHist, {
-      favicon_url: "chrome://favicon/" + hist.url,
+      favicon_url: "chrome://favicon/size/16@2x/" + hist.url,
       lastVisitDate: parseInt(hist.lastVisitTime, 10)
     });
     return mergedHist;
