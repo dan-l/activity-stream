@@ -7,6 +7,6 @@ module.exports = {
   SEARCH_SETTINGS: "Change Search Settings",
   SEARCH_PLACEHOLDER: "Search the Web",
   SEARCH_RESULT_REGEX: "(google|bing|yahoo|wikipedia|duckduckgo)+.*(search|q|url|ion)",
-  LOCALHOST_REGEX: "localhost",
+  LOCAL_REGEX: "(localhost|file)",
   BROWSER_RESOURCE_REGEX: "chrome"
 };
