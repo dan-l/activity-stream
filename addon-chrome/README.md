@@ -13,4 +13,7 @@ Get complexity report:
 $ npm run analyze
 ```
 
-You can find the report under "report" directory and open the index.html file in your browser.
+You can find the report under "report" directory and open the index.html file in your browser.'
+
+### Demo
+![Demo](/../screenshots/screenshots/activitystreamwebextension.gif/ "Demo")
