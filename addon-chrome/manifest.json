@@ -1,0 +1,22 @@
+{
+  "manifest_version": 2,
+
+  "name": "Activity Stream Add-on",
+  "description": "MVP prototype add-on for activity streams",
+  "version": "1.0",
+
+  "browser_action": {
+    "default_icon": "content/img/firstrun-customize.png"
+  },
+  "permissions": [
+    "history",
+    "tabs",
+    "chrome://favicon/",
+    "bookmarks",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "chrome_url_overrides" : {
+    "newtab": "content/activity-streams.html"
+  }
+}

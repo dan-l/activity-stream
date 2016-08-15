@@ -23,7 +23,9 @@ module.exports = function setRowsOrError(requestType, responseType, querySize) {
           state.error = action.data;
         } else {
           state.init = true;
-          state.rows = meta.append ? prevState.rows.concat(action.data) : action.data;
+          // Flag that indicates whether to prepend or append to new results to existing state (which is an array)
+          state.rows = meta.prepend ? action.data.concat(prevState.rows) :
+            meta.append ? prevState.rows.concat(action.data) : action.data;
           state.error = false;
           // If there is no data, we definitely can't load more.
           if (!action.data || !action.data.length) {
